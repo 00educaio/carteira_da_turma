@@ -1,0 +1,113 @@
+.class-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.class-panel h2 {
+  margin-bottom: 0;
+}
+
+.class-selector {
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 320px);
+  color: #475569;
+  font-size: .82rem;
+  font-weight: 750;
+}
+
+.class-controls,
+.inline-form,
+.classroom-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.class-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.inline-form input {
+  min-width: 220px;
+}
+
+.classroom-transfer {
+  min-width: 180px;
+}
+
+.classroom-status {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.classroom-status.archived {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.student-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.user-label {
+  align-self: center;
+  color: #cbd5e1;
+  font-size: .85rem;
+}
+
+.logout-form {
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .class-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .class-selector {
+    min-width: 0;
+  }
+
+  .class-controls,
+  .inline-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .class-controls,
+  .class-controls .button,
+  .inline-form,
+  .inline-form .button,
+  .inline-form input,
+  .classroom-transfer {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .classroom-actions,
+  .student-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(100%, 240px);
+  }
+
+  .classroom-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .classroom-actions .button,
+  .student-actions .button {
+    width: 100%;
+  }
+}

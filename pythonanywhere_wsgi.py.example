@@ -1,0 +1,22 @@
+"""Modelo para o arquivo WSGI configurado na aba Web do PythonAnywhere."""
+
+import os
+import sys
+
+PROJECT_PATH = "/home/SEU_USUARIO/carteira-da-turma-django"
+if PROJECT_PATH not in sys.path:
+    sys.path.insert(0, PROJECT_PATH)
+
+os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
+os.environ["DEBUG"] = "False"
+os.environ["SECRET_KEY"] = "SUBSTITUA_POR_UMA_CHAVE_LONGA_E_ALEATORIA"
+os.environ["ALLOWED_HOSTS"] = "SEU_USUARIO.pythonanywhere.com"
+os.environ["CSRF_TRUSTED_ORIGINS"] = "https://SEU_USUARIO.pythonanywhere.com"
+os.environ["SQLITE_PATH"] = f"{PROJECT_PATH}/db.sqlite3"
+# O redirecionamento HTTPS deve ser ativado na aba Web do PythonAnywhere.
+os.environ["SECURE_SSL_REDIRECT"] = "False"
+os.environ["SECURE_HSTS_SECONDS"] = "3600"
+
+from django.core.wsgi import get_wsgi_application
+
+application = get_wsgi_application()

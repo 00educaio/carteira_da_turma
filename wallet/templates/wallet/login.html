@@ -1,0 +1,33 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f172a">
+  <title>Entrar — Carteira da Turma</title>
+  <link rel="stylesheet" href="{% static 'wallet/css/app.css' %}?v=7">
+  <link rel="stylesheet" href="{% static 'wallet/css/login.css' %}?v=7">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <p class="eyebrow">ACESSO DO PROFESSOR</p>
+    <h1>Carteira da Turma</h1>
+    <p class="login-intro">Entre com sua conta para administrar alunos e saldos.</p>
+
+    {% if form.errors %}
+      <p class="login-error" role="alert">Usuário ou senha inválidos.</p>
+    {% endif %}
+
+    <form method="post" class="login-form">
+      {% csrf_token %}
+      <label for="id_username">Usuário</label>
+      <input id="id_username" name="username" type="text" autocomplete="username" autofocus required>
+      <label for="id_password">Senha</label>
+      <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <button class="button primary full" type="submit">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>
