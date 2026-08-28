@@ -13,8 +13,13 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .models import AppSetting, Classroom, Movement, Student
-from .services import apply_movement, ensure_weekly_reset, undo_movement
+from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
+from .services import (
+    apply_movement,
+    ensure_classroom_actions,
+    ensure_weekly_reset,
+    undo_movement,
+)
 
 User = get_user_model()
 
@@ -57,6 +62,7 @@ def classroom_for(owner, name, *, allow_inactive=False):
     classroom, _ = Classroom.objects.get_or_create(owner=owner, name=name)
     if not allow_inactive and not classroom.active:
         raise ValueError("Esta turma está arquivada. Reative-a antes de cadastrar alunos.")
+    ensure_classroom_actions(classroom)
     return classroom
 
 
@@ -78,6 +84,32 @@ def serialize_classroom(classroom):
         "student_count": student_count,
         "active_student_count": active_student_count,
     }
+
+
+def serialize_classroom_action(action):
+    return {
+        "id": action.id,
+        "name": action.name,
+        "nature": action.nature,
+        "value": action.value,
+        "position": action.position,
+        "active": action.active,
+        "default_key": action.default_key,
+    }
+
+
+def positive_integer(value):
+    if isinstance(value, bool):
+        raise ValueError("O valor de cada ação deve ser um número inteiro positivo.")
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+    else:
+        raise ValueError("O valor de cada ação deve ser um número inteiro positivo.")
+    if parsed <= 0:
+        raise ValueError("O valor de cada ação deve ser maior que zero.")
+    return parsed
 
 
 def serialize_movement(movement):
@@ -125,7 +157,9 @@ def classrooms_api(request):
                 raise ValueError("Informe o nome da turma.")
             if len(name) > 60:
                 raise ValueError("O nome da turma pode ter no máximo 60 caracteres.")
-            classroom = Classroom.objects.create(owner=request.user, name=name)
+            with transaction.atomic():
+                classroom = Classroom.objects.create(owner=request.user, name=name)
+                ensure_classroom_actions(classroom)
             return JsonResponse({"classroom": serialize_classroom(classroom)}, status=201)
         except (ValueError, IntegrityError) as exc:
             message = "Você já possui uma turma com esse nome." if isinstance(exc, IntegrityError) else str(exc)
@@ -149,6 +183,98 @@ def classrooms_api(request):
         "classrooms": [serialize_classroom(item) for item in classrooms],
         "transfer_targets": targets,
     })
+
+
+@require_http_methods(["GET", "POST"])
+@api_login_required
+def classroom_actions_api(request, classroom_id):
+    try:
+        classroom = Classroom.objects.get(
+            pk=classroom_id, owner=request.user, active=True
+        )
+    except Classroom.DoesNotExist:
+        return JsonResponse({"error": "Turma não encontrada."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse({
+            "classroom": {"id": classroom.id, "name": classroom.name},
+            "actions": [
+                serialize_classroom_action(action)
+                for action in classroom.actions.order_by("position", "name", "id")
+            ],
+        })
+
+    try:
+        data = json_body(request)
+        if not isinstance(data, dict) or not isinstance(data.get("actions"), list):
+            raise ValueError("Envie uma lista de ações para atualizar.")
+        items = data["actions"]
+        if not items:
+            raise ValueError("Envie ao menos uma ação para atualizar.")
+
+        prepared = []
+        received_ids = set()
+        valid_natures = {choice[0] for choice in ClassroomAction.NATURES}
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("Cada ação enviada deve ser um objeto válido.")
+            raw_action_id = item.get("id")
+            if isinstance(raw_action_id, bool) or not (
+                isinstance(raw_action_id, int)
+                or (isinstance(raw_action_id, str) and raw_action_id.strip().isdigit())
+            ):
+                raise ValueError("Identificador de ação inválido.")
+            action_id = int(raw_action_id)
+            if action_id <= 0:
+                raise ValueError("Identificador de ação inválido.")
+            if action_id in received_ids:
+                raise ValueError("Uma ação não pode ser enviada mais de uma vez.")
+            received_ids.add(action_id)
+
+            if "value" not in item:
+                raise ValueError("Informe o valor de todas as ações enviadas.")
+            value = positive_integer(item["value"])
+            active = item.get("active")
+            if not isinstance(active, bool):
+                raise ValueError("O status de cada ação deve ser ativo ou inativo.")
+            nature = item.get("nature")
+            if nature is not None and nature not in valid_natures:
+                raise ValueError("Natureza de ação inválida.")
+            prepared.append((action_id, value, active, nature))
+
+        with transaction.atomic():
+            if not Classroom.objects.select_for_update().filter(
+                pk=classroom.id, owner=request.user, active=True
+            ).exists():
+                raise ValueError("Esta turma está arquivada e não pode ser configurada.")
+            actions = {
+                action.id: action
+                for action in ClassroomAction.objects.select_for_update().filter(
+                    classroom=classroom, id__in=received_ids
+                )
+            }
+            if len(actions) != len(received_ids):
+                raise ValueError("Uma ou mais ações não pertencem a esta turma.")
+
+            changed = []
+            for action_id, value, active, nature in prepared:
+                action = actions[action_id]
+                if nature is not None and nature != action.nature:
+                    raise ValueError("A natureza de uma ação não pode ser alterada.")
+                action.value = value
+                action.active = active
+                changed.append(action)
+            ClassroomAction.objects.bulk_update(changed, ["value", "active"])
+
+        return JsonResponse({
+            "classroom": {"id": classroom.id, "name": classroom.name},
+            "actions": [
+                serialize_classroom_action(action)
+                for action in classroom.actions.order_by("position", "name", "id")
+            ],
+        })
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
 
 
 @require_POST
@@ -480,6 +606,7 @@ def restore_api(request):
                     name=name,
                     active=bool(item.get("active", True)),
                 )
+                ensure_classroom_actions(classrooms[name])
 
             student_map = {}
             for item in students_data:

@@ -7,6 +7,11 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("api/classrooms/", views.classrooms_api, name="classrooms_api"),
     path(
+        "api/classrooms/<int:classroom_id>/actions/",
+        views.classroom_actions_api,
+        name="classroom_actions_api",
+    ),
+    path(
         "api/classrooms/<int:classroom_id>/rename/",
         views.rename_classroom_api,
         name="rename_classroom_api",

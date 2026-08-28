@@ -1,7 +1,44 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import AppSetting, Movement, Student
+from .models import AppSetting, ClassroomAction, Movement, Student
+
+
+DEFAULT_CLASSROOM_ACTIONS = (
+    ("good-behavior", "Bom comportamento", ClassroomAction.CREDIT),
+    ("organized-classroom", "Organizou a sala", ClassroomAction.CREDIT),
+    ("helped-classmate", "Ajudou um colega", ClassroomAction.CREDIT),
+    ("finished-activity", "Terminou a atividade", ClassroomAction.CREDIT),
+    ("handwriting-practice", "Fazer caligrafia", ClassroomAction.CREDIT),
+    ("bathroom", "Ir ao banheiro", ClassroomAction.DEBIT),
+    ("drink-water", "Beber água", ClassroomAction.DEBIT),
+    ("sheet-of-paper", "Folha de papel", ClassroomAction.DEBIT),
+    ("indiscipline", "Indisciplina", ClassroomAction.DEBIT),
+    ("lost-card-replacement", "Reposição de cartão perdido", ClassroomAction.DEBIT),
+)
+
+
+@transaction.atomic
+def ensure_classroom_actions(classroom):
+    """Create only the missing default actions without changing existing settings."""
+    existing_keys = set(classroom.actions.values_list("default_key", flat=True))
+    missing = [
+        ClassroomAction(
+            classroom=classroom,
+            default_key=default_key,
+            name=name,
+            nature=nature,
+            value=1,
+            position=position,
+        )
+        for position, (default_key, name, nature) in enumerate(
+            DEFAULT_CLASSROOM_ACTIONS, start=1
+        )
+        if default_key not in existing_keys
+    ]
+    if missing:
+        ClassroomAction.objects.bulk_create(missing, ignore_conflicts=True)
+    return classroom.actions.all()
 
 
 def current_week_key():

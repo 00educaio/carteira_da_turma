@@ -1,9 +1,12 @@
 import json
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from .models import AppSetting, Classroom, Movement, Student
+from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
+from .services import DEFAULT_CLASSROOM_ACTIONS, ensure_classroom_actions
 
 
 class ClassAdministrationTests(TestCase):
@@ -208,6 +211,8 @@ class AuthenticationTests(TestCase):
             ("get", "/api/students/"),
             ("get", "/api/classrooms/"),
             ("post", "/api/classrooms/"),
+            ("get", "/api/classrooms/1/actions/"),
+            ("post", "/api/classrooms/1/actions/"),
             ("post", "/api/classrooms/1/rename/"),
             ("post", "/api/classrooms/1/archive/"),
             ("post", "/api/classrooms/1/transfer/"),
@@ -244,3 +249,180 @@ class AuthenticationTests(TestCase):
 
         self.assertEqual(self.client.get("/").status_code, 403)
         self.assertEqual(self.client.get("/api/students/").status_code, 403)
+
+
+class ClassroomActionTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="professor-acoes", password="senha-teste"
+        )
+        self.other_user = get_user_model().objects.create_superuser(
+            username="outro-professor", password="senha-teste"
+        )
+        self.client.force_login(self.user)
+
+    def create_classroom(self, name="6º A"):
+        response = self.client.post(
+            "/api/classrooms/",
+            data=json.dumps({"name": name}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        return Classroom.objects.get(pk=response.json()["classroom"]["id"])
+
+    def test_new_classroom_receives_the_complete_default_catalog(self):
+        classroom = self.create_classroom()
+        actions = list(classroom.actions.order_by("position"))
+
+        self.assertEqual(len(actions), len(DEFAULT_CLASSROOM_ACTIONS))
+        self.assertEqual(
+            [action.default_key for action in actions],
+            [item[0] for item in DEFAULT_CLASSROOM_ACTIONS],
+        )
+        self.assertTrue(all(action.value == 1 for action in actions))
+
+    def test_catalog_service_is_idempotent_and_preserves_configuration(self):
+        classroom = self.create_classroom()
+        action = classroom.actions.get(default_key="good-behavior")
+        action.value = 7
+        action.active = False
+        action.save(update_fields=["value", "active"])
+
+        ensure_classroom_actions(classroom)
+        ensure_classroom_actions(classroom)
+
+        self.assertEqual(classroom.actions.count(), len(DEFAULT_CLASSROOM_ACTIONS))
+        action.refresh_from_db()
+        self.assertEqual(action.value, 7)
+        self.assertFalse(action.active)
+
+    def test_action_value_has_model_and_database_validation(self):
+        classroom = Classroom.objects.create(owner=self.user, name="6º B")
+        action = ClassroomAction(
+            classroom=classroom,
+            name="Teste",
+            nature=ClassroomAction.CREDIT,
+            value=0,
+            default_key="test",
+        )
+        with self.assertRaises(ValidationError):
+            action.full_clean()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            action.save()
+
+    def test_action_reference_is_optional_and_history_survives_deletion(self):
+        classroom = self.create_classroom()
+        student = Student.objects.create(name="Ana", classroom=classroom, code="7001")
+        action = classroom.actions.get(default_key="good-behavior")
+        movement = Movement.objects.create(
+            student=student,
+            action=action,
+            movement_type=Movement.CREDIT,
+            amount=action.value,
+            signed_amount=action.value,
+            reason=action.name,
+        )
+
+        action.delete()
+        movement.refresh_from_db()
+
+        self.assertIsNone(movement.action)
+        self.assertEqual(movement.reason, "Bom comportamento")
+        self.assertEqual(movement.amount, 1)
+
+    def test_values_are_independent_between_classrooms(self):
+        class_a = self.create_classroom("6º A")
+        class_b = self.create_classroom("6º B")
+        action_a = class_a.actions.get(default_key="bathroom")
+        action_b = class_b.actions.get(default_key="bathroom")
+
+        response = self.client.post(
+            f"/api/classrooms/{class_a.id}/actions/",
+            data=json.dumps({
+                "actions": [{
+                    "id": action_a.id,
+                    "nature": action_a.nature,
+                    "value": 4,
+                    "active": False,
+                }]
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        action_a.refresh_from_db()
+        action_b.refresh_from_db()
+        self.assertEqual(action_a.value, 4)
+        self.assertFalse(action_a.active)
+        self.assertEqual(action_b.value, 1)
+        self.assertTrue(action_b.active)
+
+    def test_invalid_batch_is_entirely_rejected(self):
+        classroom = self.create_classroom()
+        first, second = classroom.actions.order_by("position")[:2]
+
+        response = self.client.post(
+            f"/api/classrooms/{classroom.id}/actions/",
+            data=json.dumps({
+                "actions": [
+                    {"id": first.id, "value": 9, "active": False},
+                    {"id": second.id, "value": 0, "active": False},
+                ]
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual((first.value, first.active), (1, True))
+        self.assertEqual((second.value, second.active), (1, True))
+
+    def test_cross_owner_and_archived_classrooms_are_not_exposed(self):
+        other_class = Classroom.objects.create(owner=self.other_user, name="Privada")
+        ensure_classroom_actions(other_class)
+        archived = self.create_classroom("Arquivada")
+        archived.active = False
+        archived.save(update_fields=["active"])
+
+        for classroom in (other_class, archived):
+            with self.subTest(classroom=classroom.name):
+                self.assertEqual(
+                    self.client.get(f"/api/classrooms/{classroom.id}/actions/").status_code,
+                    404,
+                )
+                self.assertEqual(
+                    self.client.post(
+                        f"/api/classrooms/{classroom.id}/actions/",
+                        data=json.dumps({"actions": []}),
+                        content_type="application/json",
+                    ).status_code,
+                    404,
+                )
+
+    def test_restore_creates_catalog_and_transfer_keeps_same_actions(self):
+        backup = {
+            "classrooms": [{"name": "Restaurada", "active": True}],
+            "students": [],
+            "movements": [],
+            "settings": {},
+        }
+        restored = self.client.post(
+            "/api/restore/", data=json.dumps(backup), content_type="application/json"
+        )
+        self.assertEqual(restored.status_code, 200)
+        classroom = Classroom.objects.get(owner=self.user, name="Restaurada")
+        original_ids = set(classroom.actions.values_list("id", flat=True))
+
+        transferred = self.client.post(
+            f"/api/classrooms/{classroom.id}/transfer/",
+            data=json.dumps({"target_user_id": self.other_user.id}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(transferred.status_code, 200)
+        self.assertEqual(
+            set(ClassroomAction.objects.filter(classroom=classroom).values_list("id", flat=True)),
+            original_ids,
+        )
+        self.assertEqual(len(original_ids), len(DEFAULT_CLASSROOM_ACTIONS))
