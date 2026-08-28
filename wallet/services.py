@@ -87,34 +87,45 @@ def ensure_weekly_reset(owner):
 
 
 @transaction.atomic
-def apply_movement(owner, student_id, movement_type, amount, reason):
+def apply_movement(owner, student_id, action_id):
     student = Student.objects.select_for_update().get(
         pk=student_id, classroom__owner=owner, classroom__active=True, active=True
     )
-    amount = int(amount)
-    if amount <= 0:
-        raise ValueError("O valor precisa ser maior que zero.")
+    if isinstance(action_id, bool) or not (
+        isinstance(action_id, int)
+        or (isinstance(action_id, str) and action_id.strip().isdigit())
+    ):
+        raise ValueError("Selecione uma ação válida.")
+    action_id = int(action_id)
+    if action_id <= 0:
+        raise ValueError("Selecione uma ação válida.")
+    try:
+        action = ClassroomAction.objects.select_for_update().get(pk=action_id)
+    except ClassroomAction.DoesNotExist:
+        raise ValueError("Selecione uma ação válida.") from None
+    if action.classroom_id != student.classroom_id or not action.active:
+        raise ValueError("Esta ação não está disponível para este aluno.")
 
-    if movement_type == Movement.CREDIT:
+    amount = action.value
+    if action.nature == ClassroomAction.CREDIT:
         signed_amount = amount
-    elif movement_type == Movement.DEBIT:
+    elif action.nature == ClassroomAction.DEBIT:
         signed_amount = -amount
     else:
-        raise ValueError("Tipo de movimentação inválido.")
+        raise ValueError("A natureza desta ação é inválida.")
 
     before = student.balance
     after = before + signed_amount
-    if after < 0:
-        raise ValueError("Saldo insuficiente.")
 
     student.balance = after
     student.save(update_fields=["balance"])
     movement = Movement.objects.create(
         student=student,
-        movement_type=movement_type,
+        action=action,
+        movement_type=action.nature,
         amount=amount,
         signed_amount=signed_amount,
-        reason=reason.strip() or "Movimentação",
+        reason=action.name,
         balance_before=before,
         balance_after=after,
     )
@@ -140,8 +151,6 @@ def undo_movement(owner, movement_id):
     student = Student.objects.select_for_update().get(pk=movement.student_id)
     reversal = -movement.signed_amount
     after = student.balance + reversal
-    if after < 0:
-        raise ValueError("Não é possível desfazer porque o saldo ficaria negativo.")
 
     before = student.balance
     student.balance = after

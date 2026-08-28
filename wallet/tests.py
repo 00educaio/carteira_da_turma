@@ -426,3 +426,128 @@ class ClassroomActionTests(TestCase):
             original_ids,
         )
         self.assertEqual(len(original_ids), len(DEFAULT_CLASSROOM_ACTIONS))
+
+
+class ActionMovementTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="professor-movimentos", password="senha-teste"
+        )
+        self.client.force_login(self.user)
+        self.classroom = Classroom.objects.create(owner=self.user, name="7º A")
+        ensure_classroom_actions(self.classroom)
+        self.student = Student.objects.create(
+            name="Lia", classroom=self.classroom, code="8101", balance=2
+        )
+
+    def post_movement(self, action, **extra):
+        payload = {"action_id": action.id, **extra}
+        return self.client.post(
+            f"/api/students/{self.student.id}/movement/",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+    def test_backend_uses_only_the_fixed_action_data(self):
+        action = self.classroom.actions.get(default_key="bathroom")
+        action.value = 4
+        action.save(update_fields=["value"])
+
+        response = self.post_movement(
+            action,
+            amount=999,
+            movement_type=Movement.CREDIT,
+            reason="Motivo adulterado",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        movement = Movement.objects.get(action=action)
+        self.assertEqual(self.student.balance, -2)
+        self.assertEqual(movement.movement_type, Movement.DEBIT)
+        self.assertEqual(movement.amount, 4)
+        self.assertEqual(movement.signed_amount, -4)
+        self.assertEqual(movement.reason, "Ir ao banheiro")
+        self.assertEqual(response.json()["movement"]["action_id"], action.id)
+
+    def test_lost_card_replacement_is_one_debit_and_can_make_balance_negative(self):
+        action = self.classroom.actions.get(default_key="lost-card-replacement")
+        action.value = 8
+        action.save(update_fields=["value"])
+
+        response = self.post_movement(action)
+
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.balance, -6)
+        movements = Movement.objects.filter(student=self.student)
+        self.assertEqual(movements.count(), 1)
+        self.assertEqual(movements.get().reason, "Reposição de cartão perdido")
+
+    def test_inactive_or_other_classroom_action_is_rejected(self):
+        inactive = self.classroom.actions.get(default_key="good-behavior")
+        inactive.active = False
+        inactive.save(update_fields=["active"])
+        other_classroom = Classroom.objects.create(owner=self.user, name="7º B")
+        ensure_classroom_actions(other_classroom)
+        other_action = other_classroom.actions.get(default_key="good-behavior")
+
+        for action in (inactive, other_action):
+            with self.subTest(action=action.id):
+                response = self.post_movement(action)
+                self.assertEqual(response.status_code, 400)
+
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.balance, 2)
+        self.assertFalse(Movement.objects.filter(student=self.student).exists())
+
+    def test_action_owned_by_another_user_is_rejected(self):
+        other_user = get_user_model().objects.create_superuser(
+            username="professor-externo", password="senha-teste"
+        )
+        other_classroom = Classroom.objects.create(owner=other_user, name="Privada")
+        ensure_classroom_actions(other_classroom)
+        action = other_classroom.actions.first()
+
+        response = self.post_movement(action)
+
+        self.assertEqual(response.status_code, 400)
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.balance, 2)
+
+    def test_reversal_uses_historical_value_and_may_leave_negative_balance(self):
+        credit = self.classroom.actions.get(default_key="good-behavior")
+        debit = self.classroom.actions.get(default_key="bathroom")
+        credit.value = 3
+        debit.value = 8
+        credit.save(update_fields=["value"])
+        debit.save(update_fields=["value"])
+
+        credit_response = self.post_movement(credit)
+        self.post_movement(debit)
+        credit.value = 20
+        credit.save(update_fields=["value"])
+
+        response = self.client.post(
+            f"/api/movements/{credit_response.json()['movement']['id']}/undo/",
+            data="{}",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.balance, -6)
+        reversal = Movement.objects.filter(
+            student=self.student, movement_type=Movement.REVERSAL
+        ).get()
+        self.assertEqual(reversal.amount, 3)
+        self.assertEqual(reversal.signed_amount, -3)
+
+    def test_page_has_action_selection_and_no_free_value_or_reason_fields(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, 'id="actionsConfigPanel"')
+        self.assertContains(response, 'id="movementActions"')
+        self.assertNotContains(response, 'id="amountInput"')
+        self.assertNotContains(response, 'id="reasonSelect"')
+        self.assertNotContains(response, 'id="customReason"')

@@ -49,6 +49,7 @@ def serialize_student(student):
     return {
         "id": student.id,
         "name": student.name,
+        "classroom_id": student.classroom_id,
         "class_name": student.class_name,
         "code": student.code,
         "balance": student.balance,
@@ -115,6 +116,7 @@ def positive_integer(value):
 def serialize_movement(movement):
     return {
         "id": movement.id,
+        "action_id": movement.action_id,
         "student_id": movement.student_id,
         "student_name": movement.student.name,
         "class_name": movement.student.class_name,
@@ -441,12 +443,12 @@ def bulk_students_api(request):
 def movement_api(request, student_id):
     try:
         data = json_body(request)
+        if not isinstance(data, dict):
+            raise ValueError("Envie uma ação válida para a movimentação.")
         student, movement = apply_movement(
             owner=request.user,
             student_id=student_id,
-            movement_type=data.get("movement_type"),
-            amount=data.get("amount"),
-            reason=str(data.get("reason", "")),
+            action_id=data.get("action_id"),
         )
         return JsonResponse({
             "student": serialize_student(student),
