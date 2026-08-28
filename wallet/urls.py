@@ -5,7 +5,6 @@ app_name = "wallet"
 
 urlpatterns = [
     path("", views.index, name="index"),
-    path("health/", views.health, name="health"),
     path("api/classrooms/", views.classrooms_api, name="classrooms_api"),
     path(
         "api/classrooms/<int:classroom_id>/rename/",

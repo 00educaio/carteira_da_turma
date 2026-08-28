@@ -247,4 +247,3 @@ setMovementType("credit");
 const savedClass = localStorage.getItem(storageKey("selectedClass"));
 state.currentClass = savedClass && savedClass !== "__all__" ? savedClass : null;
 loadAll().catch(e=>{toast(e.message);$("#serverStatus").textContent="Offline";});
-setInterval(()=>fetch("/health/").catch(()=>{}), 8*60*1000);

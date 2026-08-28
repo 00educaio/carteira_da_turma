@@ -16,7 +16,6 @@ Aplicação simples para administrar moedas dos alunos, com acesso isolado por s
 - Reset manual.
 - Impressão dos cartões.
 - Backup e restauração em JSON.
-- Ping a cada 8 minutos enquanto a página estiver aberta.
 
 ## Rodar localmente
 
@@ -65,31 +64,6 @@ Na aba **Web**:
 O SQLite do PythonAnywhere é persistente. Antes de atualizar uma instalação já em
 uso, baixe um backup pela aplicação e depois execute `migrate` e `collectstatic`
 novamente. Não envie a chave secreta real para o repositório.
-
-## Deploy gratuito no Render
-
-1. Crie um repositório no GitHub e envie esta pasta.
-2. No Render, escolha **New > Blueprint**.
-3. Conecte o repositório.
-4. O Render lerá o `render.yaml`.
-5. Confirme o serviço gratuito e aguarde o deploy.
-
-Também é possível criar um Web Service manualmente:
-
-- Runtime: `Python 3`
-- Build Command: `./build.sh`
-- Start Command: `./start.sh`
-- Health Check Path: `/health/`
-
-## Limitação assumida
-
-O Render gratuito usa armazenamento efêmero. O SQLite pode ser apagado quando o serviço entra em repouso, reinicia ou recebe novo deploy.
-
-Para reduzir o impacto:
-
-1. Enquanto a página estiver aberta, ela chama `/health/` a cada 8 minutos.
-2. Use **Baixar backup** para guardar um arquivo manual ao final da aula.
-3. Guarde o JSON fora do Render e use **Restaurar backup** quando necessário.
 
 ## Formato para cadastro em massa
 

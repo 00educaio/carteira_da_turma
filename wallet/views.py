@@ -114,11 +114,6 @@ def index(request):
     return render(request, "wallet/index.html")
 
 
-@require_GET
-def health(request):
-    return JsonResponse({"status": "ok", "time": timezone.now().isoformat()})
-
-
 @require_http_methods(["GET", "POST"])
 @api_login_required
 def classrooms_api(request):

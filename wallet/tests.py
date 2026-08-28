@@ -227,9 +227,6 @@ class AuthenticationTests(TestCase):
                 response = getattr(self.client, method)(path)
                 self.assertEqual(response.status_code, 401)
 
-    def test_health_endpoint_remains_public(self):
-        self.assertEqual(self.client.get("/health/").status_code, 200)
-
     def test_valid_user_can_log_in(self):
         get_user_model().objects.create_superuser(
             username="professor", password="senha-segura"
