@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0f172a">
   <title>Carteira da Turma</title>
-  <link rel="stylesheet" href="{% static 'wallet/css/app.css' %}?v=8">
-  <link rel="stylesheet" href="{% static 'wallet/css/class-filter.css' %}?v=8">
+  <link rel="stylesheet" href="{% static 'wallet/css/app.css' %}?v=9">
+  <link rel="stylesheet" href="{% static 'wallet/css/class-filter.css' %}?v=9">
 </head>
 <body data-owner-id="{{ request.user.pk }}">
   <header class="topbar">
@@ -145,9 +145,65 @@
         </table>
       </div>
     </section>
+
+    <section class="panel full-width" id="analyticsPanel">
+      <div class="panel-title-row">
+        <div>
+          <p class="eyebrow">VISÃO GERAL</p>
+          <h2>Análise financeira</h2>
+          <p class="help">Ganhos e gastos não incluem resets, estornos ou movimentações desfeitas.</p>
+        </div>
+        <span class="status" id="analyticsStatus">Carregando…</span>
+      </div>
+      <div class="analytics-filters">
+        <label>Período
+          <select id="analyticsPeriod">
+            <option value="week">Semana atual</option>
+            <option value="month">Mês atual</option>
+            <option value="all">Todo o histórico</option>
+            <option value="custom">Intervalo personalizado</option>
+          </select>
+        </label>
+        <label>Turma
+          <select id="analyticsClassroom"><option value="">Todas as turmas</option></select>
+        </label>
+        <div class="analytics-custom-dates hidden" id="analyticsCustomDates">
+          <label>Data inicial<input id="analyticsStart" type="date"></label>
+          <label>Data final<input id="analyticsEnd" type="date"></label>
+        </div>
+        <button class="button primary" id="applyAnalyticsFilters" type="button">Atualizar análise</button>
+      </div>
+      <div id="analyticsError" class="config-error hidden"></div>
+      <div id="analyticsCards" class="analytics-cards"></div>
+      <p id="analyticsEmpty" class="analytics-empty hidden">Nenhuma movimentação de ganho ou gasto neste período.</p>
+
+      <div class="analytics-tables">
+        <section>
+          <h3>Totais por turma</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Turma</th><th>Total ganho</th><th>Total gasto</th></tr></thead>
+            <tbody id="analyticsClassroomsTable"></tbody>
+          </table></div>
+        </section>
+        <section>
+          <h3>Totais por aluno</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Aluno</th><th>Turma</th><th>Status</th><th>Total ganho</th><th>Total gasto</th></tr></thead>
+            <tbody id="analyticsStudentsTable"></tbody>
+          </table></div>
+        </section>
+        <section>
+          <h3>Alunos no vermelho</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Aluno</th><th>Turma</th><th>Saldo atual</th></tr></thead>
+            <tbody id="analyticsNegativeTable"></tbody>
+          </table></div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="{% static 'wallet/js/app.js' %}?v=8"></script>
+  <script src="{% static 'wallet/js/app.js' %}?v=9"></script>
 </body>
 </html>

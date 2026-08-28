@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
 from .services import (
     apply_movement,
+    build_analytics,
     ensure_classroom_actions,
     ensure_weekly_reset,
     undo_movement,
@@ -491,6 +492,25 @@ def movements_api(request):
         )
     movements = movements[:limit]
     return JsonResponse({"movements": [serialize_movement(item) for item in movements]})
+
+
+@require_GET
+@api_login_required
+def analytics_api(request):
+    try:
+        ensure_weekly_reset(request.user)
+        data = build_analytics(
+            owner=request.user,
+            period=request.GET.get("period", "week"),
+            start=request.GET.get("start"),
+            end=request.GET.get("end"),
+            classroom_id=request.GET.get("classroom_id"),
+        )
+        return JsonResponse(data)
+    except Classroom.DoesNotExist:
+        return JsonResponse({"error": "Turma não encontrada."}, status=404)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
 
 
 @require_POST

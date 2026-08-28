@@ -32,6 +32,7 @@ urlpatterns = [
     path("api/students/<int:student_id>/movement/", views.movement_api, name="movement_api"),
     path("api/students/<int:student_id>/delete/", views.delete_student_api, name="delete_student_api"),
     path("api/movements/", views.movements_api, name="movements_api"),
+    path("api/analytics/", views.analytics_api, name="analytics_api"),
     path("api/movements/<int:movement_id>/undo/", views.undo_api, name="undo_api"),
     path("api/reset/", views.reset_api, name="reset_api"),
     path("api/backup/", views.backup_api, name="backup_api"),

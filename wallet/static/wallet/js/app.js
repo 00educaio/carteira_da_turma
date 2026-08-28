@@ -1,7 +1,9 @@
 const state = {
   students: [], movements: [], classes: [], classrooms: [], transferTargets: [],
   selected: null, studentActions: [], selectedActionId: null,
-  movementType: "credit", currentClass: null, actionsConfig: null
+  movementType: "credit", currentClass: null, actionsConfig: null,
+  analytics: null, analyticsPeriod: "week", analyticsClassroomId: null,
+  analyticsRequest: 0
 };
 const $ = (selector) => document.querySelector(selector);
 const storageKey = (name) => `classWallet:${document.body.dataset.ownerId}:${name}`;
@@ -278,6 +280,113 @@ function renderMovements(){
   document.querySelectorAll(".undo").forEach(el=>el.onclick=async()=>{try{await api(`/api/movements/${el.dataset.id}/undo/`,{method:"POST",body:"{}"});toast("Movimentação desfeita.");await loadAll();}catch(e){toast(e.message)}});
 }
 
+function renderAnalyticsClassroomFilter(){
+  const activeClassrooms = state.classrooms.filter(classroom=>classroom.active);
+  if(state.analyticsClassroomId && !activeClassrooms.some(classroom=>classroom.id===state.analyticsClassroomId)){
+    state.analyticsClassroomId = null;
+  }
+  $("#analyticsClassroom").innerHTML = `<option value="">Todas as turmas</option>` + activeClassrooms.map(classroom=>
+    `<option value="${classroom.id}">${escapeHtml(classroom.name || "Sem turma")}</option>`
+  ).join("");
+  $("#analyticsClassroom").value = state.analyticsClassroomId || "";
+}
+
+function analyticsLeaderText(items, field, includeClass=false){
+  if(!items.length) return "Sem movimentação";
+  const names = items.map(item=>includeClass
+    ? `${item.name} (${item.class_name || "Sem turma"})`
+    : item.name
+  ).join(", ");
+  return `${names} — ${money(items[0][field])}`;
+}
+
+function renderAnalytics(){
+  const data = state.analytics;
+  if(!data) return;
+  const cards = [
+    ["Total gasto", money(data.totals.spent), "spent"],
+    ["Total ganho", money(data.totals.earned), "earned"],
+    ["Turma que mais gastou", analyticsLeaderText(data.leaders.most_spent_classrooms, "spent"), ""],
+    ["Turma que menos gastou", analyticsLeaderText(data.leaders.least_spent_classrooms, "spent"), ""],
+    ["Aluno que mais gastou", analyticsLeaderText(data.leaders.most_spent_students, "spent", true), ""],
+    ["Aluno que mais ganhou", analyticsLeaderText(data.leaders.most_earned_students, "earned", true), ""],
+    ["Alunos no vermelho", String(data.negative_students.length), "negative"]
+  ];
+  $("#analyticsCards").innerHTML = cards.map(([label,value,tone])=>`<article class="analytics-card ${tone}">
+    <span>${label}</span><strong>${escapeHtml(value)}</strong>
+  </article>`).join("");
+  $("#analyticsEmpty").classList.toggle("hidden", data.totals.earned!==0 || data.totals.spent!==0);
+
+  $("#analyticsClassroomsTable").innerHTML = data.classrooms.map(item=>`<tr>
+    <td data-label="Turma"><strong>${escapeHtml(item.name || "Sem turma")}</strong></td>
+    <td data-label="Total ganho" class="amount-positive">${money(item.earned)}</td>
+    <td data-label="Total gasto" class="amount-negative">${money(item.spent)}</td>
+  </tr>`).join("") || `<tr><td colspan="3">Nenhuma turma ativa encontrada.</td></tr>`;
+
+  $("#analyticsStudentsTable").innerHTML = data.students.map(item=>`<tr>
+    <td data-label="Aluno"><strong>${escapeHtml(item.name)}</strong></td>
+    <td data-label="Turma">${escapeHtml(item.class_name || "Sem turma")}</td>
+    <td data-label="Status">${item.active ? "Ativo" : "Inativo"}</td>
+    <td data-label="Total ganho" class="amount-positive">${money(item.earned)}</td>
+    <td data-label="Total gasto" class="amount-negative">${money(item.spent)}</td>
+  </tr>`).join("") || `<tr><td colspan="5">Nenhum aluno encontrado.</td></tr>`;
+
+  $("#analyticsNegativeTable").innerHTML = data.negative_students.map(item=>`<tr>
+    <td data-label="Aluno"><strong>${escapeHtml(item.name)}</strong></td>
+    <td data-label="Turma">${escapeHtml(item.class_name || "Sem turma")}</td>
+    <td data-label="Saldo atual" class="balance negative">${money(item.balance)}</td>
+  </tr>`).join("") || `<tr><td colspan="3">Nenhum aluno ativo está no vermelho.</td></tr>`;
+}
+
+function formatAnalyticsDate(value){
+  if(!value) return "";
+  const [year,month,day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+async function loadAnalytics(){
+  const requestId = ++state.analyticsRequest;
+  const status = $("#analyticsStatus");
+  const error = $("#analyticsError");
+  status.textContent = "Carregando…";
+  status.classList.remove("online");
+  error.classList.add("hidden");
+  const params = new URLSearchParams({period:state.analyticsPeriod});
+  if(state.analyticsClassroomId) params.set("classroom_id", state.analyticsClassroomId);
+  if(state.analyticsPeriod==="custom"){
+    const start = $("#analyticsStart").value;
+    const end = $("#analyticsEnd").value;
+    if(!start || !end){
+      status.textContent = "Aguardando datas";
+      error.textContent = "Informe as datas inicial e final do intervalo.";
+      error.classList.remove("hidden");
+      return;
+    }
+    params.set("start", start); params.set("end", end);
+  }
+  try{
+    const data = await api(`/api/analytics/?${params}`);
+    if(requestId!==state.analyticsRequest) return;
+    state.analytics = data;
+    renderAnalytics();
+    const period = state.analytics.period;
+    status.textContent = period.start
+      ? `${formatAnalyticsDate(period.start)} a ${formatAnalyticsDate(period.end)}`
+      : "Todo o histórico";
+    status.classList.add("online");
+  }catch(e){
+    if(requestId!==state.analyticsRequest) return;
+    state.analytics = null;
+    status.textContent = "Erro";
+    error.textContent = e.message;
+    error.classList.remove("hidden");
+    $("#analyticsCards").innerHTML = "";
+    $("#analyticsClassroomsTable").innerHTML = `<tr><td colspan="3">Não foi possível carregar os dados.</td></tr>`;
+    $("#analyticsStudentsTable").innerHTML = `<tr><td colspan="5">Não foi possível carregar os dados.</td></tr>`;
+    $("#analyticsNegativeTable").innerHTML = `<tr><td colspan="3">Não foi possível carregar os dados.</td></tr>`;
+  }
+}
+
 async function loadAll(){
   const [studentData, classroomData] = await Promise.all([
     api(filteredApiUrl("/api/students/")),
@@ -307,6 +416,8 @@ async function loadAll(){
     }
   }
   renderClassFilter(); renderClassrooms(); renderStudents(); renderMovements();
+  renderAnalyticsClassroomFilter();
+  await loadAnalytics();
   $("#serverStatus").textContent = "Online"; $("#serverStatus").classList.add("online");
   if(studentData.reset_performed) toast("Os saldos foram resetados para a nova semana.");
 }
@@ -329,6 +440,21 @@ $("#closeActionsConfig").onclick=()=>{
 };
 $("#saveActionsConfig").onclick=saveActionsConfig;
 $("#refreshButton").onclick=()=>loadAll().catch(e=>toast(e.message));
+$("#analyticsPeriod").onchange=event=>{
+  state.analyticsPeriod = event.target.value;
+  $("#analyticsCustomDates").classList.toggle("hidden", state.analyticsPeriod!=="custom");
+  loadAnalytics();
+};
+$("#analyticsClassroom").onchange=event=>{
+  state.analyticsClassroomId = event.target.value ? Number(event.target.value) : null;
+  loadAnalytics();
+};
+$("#applyAnalyticsFilters").onclick=()=>{
+  state.analyticsPeriod = $("#analyticsPeriod").value;
+  state.analyticsClassroomId = $("#analyticsClassroom").value
+    ? Number($("#analyticsClassroom").value) : null;
+  loadAnalytics();
+};
 
 $("#createClassButton").onclick=async()=>{try{
   const name=$("#newClassName").value.trim();
@@ -377,7 +503,7 @@ $("#resetButton").onclick=async()=>{
   }catch(e){toast(e.message)}
 };
 
-$("#restoreInput").onchange=async(event)=>{const file=event.target.files[0];if(!file)return;try{const form=new FormData();form.append("file",file);await api("/api/restore/",{method:"POST",body:form});toast("Backup restaurado.");await loadAll();}catch(e){toast(e.message)}finally{event.target.value=""}};
+$("#restoreInput").onchange=async(event)=>{const file=event.target.files[0];if(!file)return;try{const form=new FormData();form.append("file",file);await api("/api/restore/",{method:"POST",body:form});state.analyticsClassroomId=null;toast("Backup restaurado.");await loadAll();}catch(e){toast(e.message)}finally{event.target.value=""}};
 
 $("#printCardsButton").onclick=()=>{
   const area=document.createElement("section");area.id="printArea";area.style.cssText="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;padding:20px";
@@ -386,6 +512,9 @@ $("#printCardsButton").onclick=()=>{
 };
 
 setMovementType("credit");
+const localToday = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+$("#analyticsStart").value = localToday;
+$("#analyticsEnd").value = localToday;
 const savedClass = localStorage.getItem(storageKey("selectedClass"));
 state.currentClass = savedClass && savedClass !== "__all__" ? savedClass : null;
 loadAll().catch(e=>{toast(e.message);$("#serverStatus").textContent="Offline";});

@@ -1,9 +1,11 @@
 import json
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 
 from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
 from .services import DEFAULT_CLASSROOM_ACTIONS, ensure_classroom_actions
@@ -221,6 +223,7 @@ class AuthenticationTests(TestCase):
             ("post", "/api/students/1/movement/"),
             ("post", "/api/students/1/delete/"),
             ("get", "/api/movements/"),
+            ("get", "/api/analytics/"),
             ("post", "/api/movements/1/undo/"),
             ("post", "/api/reset/"),
             ("get", "/api/backup/"),
@@ -551,3 +554,175 @@ class ActionMovementTests(TestCase):
         self.assertNotContains(response, 'id="amountInput"')
         self.assertNotContains(response, 'id="reasonSelect"')
         self.assertNotContains(response, 'id="customReason"')
+
+
+class AnalyticsTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="professor-analise", password="senha-teste"
+        )
+        self.other_user = get_user_model().objects.create_superuser(
+            username="analise-externa", password="senha-teste"
+        )
+        self.client.force_login(self.user)
+
+        self.class_a = Classroom.objects.create(owner=self.user, name="6º A")
+        self.class_b = Classroom.objects.create(owner=self.user, name="6º B")
+        self.class_zero = Classroom.objects.create(owner=self.user, name="6º C")
+        self.archived = Classroom.objects.create(
+            owner=self.user, name="Arquivada", active=False
+        )
+        self.ana = Student.objects.create(
+            name="Ana", classroom=self.class_a, code="9101", balance=-2
+        )
+        self.inactive = Student.objects.create(
+            name="Caio", classroom=self.class_a, code="9102", balance=-9, active=False
+        )
+        self.bruno = Student.objects.create(
+            name="Bruno", classroom=self.class_b, code="9103", balance=-1
+        )
+        self.zero_student = Student.objects.create(
+            name="Dora", classroom=self.class_zero, code="9104"
+        )
+
+        self.create_movement(self.ana, Movement.CREDIT, 10)
+        self.create_movement(self.ana, Movement.DEBIT, 4)
+        self.create_movement(self.ana, Movement.RESET, 6)
+        self.create_movement(self.ana, Movement.CREDIT, 50, reversed=True)
+        self.create_movement(self.ana, Movement.REVERSAL, 50)
+        self.create_movement(self.inactive, Movement.CREDIT, 3)
+        self.create_movement(self.bruno, Movement.CREDIT, 10)
+        self.create_movement(self.bruno, Movement.DEBIT, 4)
+
+        self.old_movement = self.create_movement(self.ana, Movement.CREDIT, 100)
+        old_date = timezone.now() - timedelta(days=45)
+        Movement.objects.filter(pk=self.old_movement.pk).update(created_at=old_date)
+
+        archived_student = Student.objects.create(
+            name="Arquivado", classroom=self.archived, code="9105"
+        )
+        self.create_movement(archived_student, Movement.DEBIT, 90)
+        other_class = Classroom.objects.create(owner=self.other_user, name="Externa")
+        other_student = Student.objects.create(
+            name="Externo", classroom=other_class, code="9106", balance=-100
+        )
+        self.create_movement(other_student, Movement.DEBIT, 100)
+
+    def create_movement(self, student, movement_type, amount, reversed=False):
+        signed = amount if movement_type == Movement.CREDIT else -amount
+        return Movement.objects.create(
+            student=student,
+            movement_type=movement_type,
+            amount=amount,
+            signed_amount=signed,
+            reason="Teste de análise",
+            reversed=reversed,
+        )
+
+    def custom_today(self, **params):
+        today = timezone.localdate().isoformat()
+        query = {"period": "custom", "start": today, "end": today, **params}
+        return self.client.get("/api/analytics/", query)
+
+    def test_totals_exclude_reset_reversal_reversed_archived_and_other_owner(self):
+        response = self.custom_today()
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["totals"], {"earned": 23, "spent": 8})
+        self.assertEqual(
+            [(item["name"], item["spent"]) for item in data["classrooms"]],
+            [("6º A", 4), ("6º B", 4), ("6º C", 0)],
+        )
+        inactive = next(item for item in data["students"] if item["name"] == "Caio")
+        self.assertFalse(inactive["active"])
+        self.assertEqual(inactive["earned"], 3)
+
+    def test_ties_zero_class_and_negative_students_are_reported(self):
+        data = self.custom_today().json()
+
+        self.assertEqual(
+            [item["name"] for item in data["leaders"]["most_spent_classrooms"]],
+            ["6º A", "6º B"],
+        )
+        self.assertEqual(
+            [item["name"] for item in data["leaders"]["least_spent_classrooms"]],
+            ["6º C"],
+        )
+        self.assertEqual(
+            [item["name"] for item in data["leaders"]["most_spent_students"]],
+            ["Ana", "Bruno"],
+        )
+        self.assertEqual(
+            [item["name"] for item in data["leaders"]["most_earned_students"]],
+            ["Ana", "Bruno"],
+        )
+        self.assertEqual(
+            [(item["name"], item["balance"]) for item in data["negative_students"]],
+            [("Ana", -2), ("Bruno", -1)],
+        )
+
+    def test_all_period_and_classroom_filter(self):
+        all_data = self.client.get("/api/analytics/", {"period": "all"}).json()
+        filtered = self.custom_today(classroom_id=self.class_a.id).json()
+
+        self.assertEqual(all_data["totals"]["earned"], 123)
+        self.assertEqual(filtered["totals"], {"earned": 13, "spent": 4})
+        self.assertEqual([item["name"] for item in filtered["classrooms"]], ["6º A"])
+        self.assertEqual(
+            [item["name"] for item in filtered["negative_students"]], ["Ana"]
+        )
+
+    def test_custom_dates_are_inclusive_and_invalid_ranges_are_rejected(self):
+        data = self.custom_today().json()
+        today = timezone.localdate().isoformat()
+
+        self.assertEqual(data["period"]["start"], today)
+        self.assertEqual(data["period"]["end"], today)
+        invalid = self.client.get(
+            "/api/analytics/",
+            {"period": "custom", "start": "2026-08-20", "end": "2026-08-19"},
+        )
+        malformed = self.client.get(
+            "/api/analytics/",
+            {"period": "custom", "start": "20/08/2026", "end": "2026-08-21"},
+        )
+
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn("data inicial", invalid.json()["error"])
+        self.assertEqual(malformed.status_code, 400)
+        self.assertIn("datas válidas", malformed.json()["error"])
+
+    def test_default_period_is_the_current_week(self):
+        data = self.client.get("/api/analytics/").json()
+        today = timezone.localdate()
+        week_start = today - timedelta(days=today.weekday())
+
+        self.assertEqual(data["period"]["key"], "week")
+        self.assertEqual(data["period"]["start"], week_start.isoformat())
+        self.assertEqual(
+            data["period"]["end"], (week_start + timedelta(days=6)).isoformat()
+        )
+
+        invalid = self.client.get("/api/analytics/", {"period": "trimestre"})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn("Período", invalid.json()["error"])
+
+    def test_cross_owner_or_archived_classroom_filter_is_hidden(self):
+        external_class = Classroom.objects.get(owner=self.other_user)
+
+        for classroom in (external_class, self.archived):
+            with self.subTest(classroom=classroom.name):
+                response = self.client.get(
+                    "/api/analytics/",
+                    {"period": "all", "classroom_id": classroom.id},
+                )
+                self.assertEqual(response.status_code, 404)
+
+    def test_page_exposes_financial_dashboard_and_filters(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, "Análise financeira")
+        self.assertContains(response, 'id="analyticsPeriod"')
+        self.assertContains(response, 'id="analyticsClassroom"')
+        self.assertContains(response, 'id="analyticsNegativeTable"')
