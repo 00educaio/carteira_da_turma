@@ -3,7 +3,7 @@ const state = {
   selected: null, studentActions: [], selectedActionId: null,
   movementType: "credit", currentClass: null, actionsConfig: null,
   analytics: null, analyticsPeriod: "week", analyticsClassroomId: null,
-  analyticsRequest: 0
+  analyticsRequest: 0, localBackupChecked: false
 };
 const $ = (selector) => document.querySelector(selector);
 const storageKey = (name) => `classWallet:${document.body.dataset.ownerId}:${name}`;
@@ -387,6 +387,33 @@ async function loadAnalytics(){
   }
 }
 
+async function maybeRestoreLocalBackup(studentData, classroomData){
+  if(state.localBackupChecked) return false;
+  state.localBackupChecked = true;
+  if(studentData.students.length || classroomData.classrooms.length) return false;
+  const stored = localStorage.getItem(storageKey("backup"));
+  if(!stored) return false;
+  try{
+    const backup = JSON.parse(stored);
+    await api("/api/restore/", {method:"POST", body:JSON.stringify(backup)});
+    toast("A cópia local foi restaurada porque o servidor estava vazio.");
+    return true;
+  }catch(e){
+    toast(`A cópia local não pôde ser restaurada: ${e.message}`);
+    return false;
+  }
+}
+
+async function saveLocalBackup(){
+  try{
+    const backup = await api("/api/backup/");
+    localStorage.setItem(storageKey("backup"), JSON.stringify(backup));
+  }catch(_error){
+    // Download manual e operações principais continuam disponíveis se o navegador
+    // bloquear ou não tiver espaço para a cópia local.
+  }
+}
+
 async function loadAll(){
   const [studentData, classroomData] = await Promise.all([
     api(filteredApiUrl("/api/students/")),
@@ -396,6 +423,7 @@ async function loadAll(){
   state.classes = studentData.classes;
   state.classrooms = classroomData.classrooms;
   state.transferTargets = classroomData.transfer_targets;
+  if(await maybeRestoreLocalBackup(studentData, classroomData)) return loadAll();
   if(state.currentClass !== null && !state.classes.includes(state.currentClass)){
     clearSelectedClass();
     return loadAll();
@@ -418,6 +446,7 @@ async function loadAll(){
   renderClassFilter(); renderClassrooms(); renderStudents(); renderMovements();
   renderAnalyticsClassroomFilter();
   await loadAnalytics();
+  await saveLocalBackup();
   $("#serverStatus").textContent = "Online"; $("#serverStatus").classList.add("online");
   if(studentData.reset_performed) toast("Os saldos foram resetados para a nova semana.");
 }

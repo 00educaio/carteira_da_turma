@@ -1,6 +1,5 @@
 import json
 import random
-from datetime import datetime
 from functools import wraps
 
 from django.contrib.auth import get_user_model
@@ -13,6 +12,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from .backups import build_backup, restore_backup, validate_backup
 from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
 from .services import (
     apply_movement,
@@ -565,32 +565,9 @@ def reset_api(request):
 @require_GET
 @api_login_required
 def backup_api(request):
-    payload = {
-        "version": 2,
-        "exported_at": timezone.now().isoformat(),
-        "classrooms": [
-            {"name": classroom.name, "active": classroom.active}
-            for classroom in Classroom.objects.filter(owner=request.user).order_by("name")
-        ],
-        "students": [
-            serialize_student(student)
-            for student in Student.objects.select_related("classroom").filter(
-                classroom__owner=request.user, active=True
-            )
-        ],
-        "movements": [
-            serialize_movement(movement)
-            for movement in Movement.objects.select_related("student", "student__classroom")
-            .filter(student__classroom__owner=request.user, student__active=True)
-            .order_by("created_at", "id")
-        ],
-        "settings": {
-            setting.key: setting.value
-            for setting in AppSetting.objects.filter(owner=request.user)
-        },
-    }
+    payload = build_backup(request.user)
     response = JsonResponse(payload, json_dumps_params={"ensure_ascii": False, "indent": 2})
-    filename = f"carteira-backup-{datetime.now().strftime('%Y-%m-%d-%H%M')}.json"
+    filename = f"carteira-backup-{timezone.localtime().strftime('%Y-%m-%d-%H%M')}.json"
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
@@ -607,70 +584,16 @@ def restore_api(request):
         else:
             data = json_body(request)
 
-        students_data = data.get("students", [])
-        movements_data = data.get("movements", [])
-        settings_data = data.get("settings", {})
-        classrooms_data = data.get("classrooms", [])
-
-        with transaction.atomic():
-            Movement.objects.filter(student__classroom__owner=request.user).delete()
-            Student.objects.filter(classroom__owner=request.user).delete()
-            Classroom.objects.filter(owner=request.user).delete()
-            AppSetting.objects.filter(owner=request.user).delete()
-
-            classrooms = {}
-            for item in classrooms_data:
-                name = str(item.get("name", "")).strip()
-                if name in classrooms:
-                    continue
-                classrooms[name] = Classroom.objects.create(
-                    owner=request.user,
-                    name=name,
-                    active=bool(item.get("active", True)),
-                )
-                ensure_classroom_actions(classrooms[name])
-
-            student_map = {}
-            for item in students_data:
-                class_name = str(item.get("class_name", "")).strip()
-                student = Student.objects.create(
-                    name=item["name"],
-                    classroom=classrooms.get(class_name)
-                    or classroom_for(request.user, class_name, allow_inactive=True),
-                    code=str(item["code"]),
-                    balance=int(item.get("balance", 0)),
-                )
-                old_id = item.get("id")
-                if old_id is not None:
-                    student_map[str(old_id)] = student
-
-            for item in movements_data:
-                student = student_map.get(str(item.get("student_id")))
-                if not student:
-                    continue
-                movement = Movement.objects.create(
-                    student=student,
-                    movement_type=item.get("movement_type", Movement.CREDIT),
-                    amount=abs(int(item.get("amount", 0))),
-                    signed_amount=int(item.get("signed_amount", 0)),
-                    reason=item.get("reason", "Movimentação restaurada"),
-                    balance_before=int(item.get("balance_before", 0)),
-                    balance_after=int(item.get("balance_after", 0)),
-                    reversed=bool(item.get("reversed", False)),
-                )
-                created_at = item.get("created_at")
-                if created_at:
-                    try:
-                        parsed = datetime.fromisoformat(created_at)
-                        Movement.objects.filter(pk=movement.pk).update(created_at=parsed)
-                    except ValueError:
-                        pass
-
-            for key, value in settings_data.items():
-                AppSetting.objects.create(
-                    owner=request.user, key=str(key), value=str(value)
-                )
-
-        return JsonResponse({"restored_students": len(students_data)})
-    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        validated = validate_backup(data, request.user)
+        restored_students = restore_backup(request.user, validated)
+        return JsonResponse({
+            "version": validated["version"],
+            "restored_students": restored_students,
+        })
+    except (ValueError, KeyError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return JsonResponse({"error": str(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse(
+            {"error": "O backup viola uma restrição do banco e não foi restaurado."},
+            status=400,
+        )

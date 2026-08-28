@@ -64,6 +64,23 @@ class ClassAdministrationTests(TestCase):
         self.assertEqual(self.student_a.balance, 0)
         self.assertEqual(self.student_b.balance, 20)
 
+    def test_first_opening_in_a_new_week_resets_active_students(self):
+        AppSetting.objects.create(
+            owner=self.user, key="last_reset_week", value="2000-W01"
+        )
+
+        response = self.client.get("/api/students/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["reset_performed"])
+        self.student_a.refresh_from_db()
+        self.student_b.refresh_from_db()
+        self.assertEqual(self.student_a.balance, 0)
+        self.assertEqual(self.student_b.balance, 0)
+        self.assertEqual(
+            Movement.objects.filter(movement_type=Movement.RESET).count(), 2
+        )
+
     def test_bulk_creation_uses_selected_class_as_default(self):
         response = self.client.post(
             "/api/students/bulk/",
@@ -726,3 +743,214 @@ class AnalyticsTests(TestCase):
         self.assertContains(response, 'id="analyticsPeriod"')
         self.assertContains(response, 'id="analyticsClassroom"')
         self.assertContains(response, 'id="analyticsNegativeTable"')
+
+
+class BackupRestoreTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="professor-backup", password="senha-teste"
+        )
+        self.client.force_login(self.user)
+
+    def test_v3_round_trip_preserves_actions_negative_balance_and_history(self):
+        classroom = Classroom.objects.create(owner=self.user, name="8º A")
+        archived = Classroom.objects.create(
+            owner=self.user, name="8º B", active=False
+        )
+        ensure_classroom_actions(classroom)
+        ensure_classroom_actions(archived)
+        action = classroom.actions.get(default_key="lost-card-replacement")
+        action.value = 7
+        action.active = False
+        action.save(update_fields=["value", "active"])
+        archived_action = archived.actions.get(default_key="good-behavior")
+        archived_action.value = 9
+        archived_action.save(update_fields=["value"])
+        student = Student.objects.create(
+            name="Eva", classroom=classroom, code="9201", balance=-4
+        )
+        inactive_student = Student.objects.create(
+            name="Fábio", classroom=classroom, code="9202", active=False
+        )
+        movement = Movement.objects.create(
+            student=student,
+            action=action,
+            movement_type=Movement.DEBIT,
+            amount=3,
+            signed_amount=-3,
+            reason="Reposição no preço antigo",
+            balance_before=-1,
+            balance_after=-4,
+        )
+        Movement.objects.create(
+            student=inactive_student,
+            movement_type=Movement.CREDIT,
+            amount=2,
+            signed_amount=2,
+            reason="Histórico inativo",
+        )
+        AppSetting.objects.create(owner=self.user, key="preferencia", value="preservada")
+
+        backup = self.client.get("/api/backup/").json()
+        self.assertEqual(backup["version"], 3)
+        exported_movement = next(
+            item for item in backup["movements"] if item["id"] == movement.id
+        )
+        self.assertEqual(exported_movement["action_id"], action.id)
+        self.assertEqual(len(backup["actions"]), 20)
+
+        response = self.client.post(
+            "/api/restore/", data=json.dumps(backup), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["version"], 3)
+        restored_class = Classroom.objects.get(owner=self.user, name="8º A")
+        restored_archived = Classroom.objects.get(owner=self.user, name="8º B")
+        restored_action = restored_class.actions.get(
+            default_key="lost-card-replacement"
+        )
+        restored_movement = Movement.objects.get(reason="Reposição no preço antigo")
+        self.assertFalse(restored_archived.active)
+        self.assertEqual(
+            restored_archived.actions.get(default_key="good-behavior").value, 9
+        )
+        self.assertEqual(restored_action.value, 7)
+        self.assertFalse(restored_action.active)
+        self.assertEqual(Student.objects.get(code="9201").balance, -4)
+        self.assertFalse(Student.objects.get(code="9202").active)
+        self.assertEqual(restored_movement.action, restored_action)
+        self.assertEqual(restored_movement.amount, 3)
+        self.assertEqual(restored_movement.signed_amount, -3)
+        self.assertEqual(
+            AppSetting.objects.get(owner=self.user, key="preferencia").value,
+            "preservada",
+        )
+
+    def test_v2_restore_creates_defaults_and_keeps_legacy_movement_without_action(self):
+        backup = {
+            "version": 2,
+            "classrooms": [{"name": "Legada", "active": True}],
+            "students": [
+                {
+                    "id": 41,
+                    "name": "Gabi",
+                    "class_name": "Legada",
+                    "code": "9301",
+                    "balance": -5,
+                }
+            ],
+            "movements": [
+                {
+                    "id": 51,
+                    "student_id": 41,
+                    "movement_type": "debit",
+                    "amount": 5,
+                    "signed_amount": -5,
+                    "reason": "Despesa antiga",
+                    "balance_before": 0,
+                    "balance_after": -5,
+                    "reversed": False,
+                }
+            ],
+            "settings": {},
+        }
+
+        response = self.client.post(
+            "/api/restore/", data=json.dumps(backup), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["version"], 2)
+        classroom = Classroom.objects.get(owner=self.user, name="Legada")
+        self.assertEqual(classroom.actions.count(), len(DEFAULT_CLASSROOM_ACTIONS))
+        self.assertEqual(classroom.actions.filter(value=1).count(), 10)
+        student = Student.objects.get(code="9301")
+        self.assertEqual(student.balance, -5)
+        movement = Movement.objects.get(student=student)
+        self.assertIsNone(movement.action)
+        self.assertEqual(movement.reason, "Despesa antiga")
+        self.assertEqual(movement.amount, 5)
+
+    def test_invalid_v3_is_rejected_before_existing_data_is_deleted(self):
+        classroom = Classroom.objects.create(owner=self.user, name="Preservada")
+        ensure_classroom_actions(classroom)
+        student = Student.objects.create(
+            name="Helena", classroom=classroom, code="9401", balance=12
+        )
+        movement = Movement.objects.create(
+            student=student,
+            movement_type=Movement.CREDIT,
+            amount=12,
+            signed_amount=12,
+            reason="Não apagar",
+        )
+        setting = AppSetting.objects.create(
+            owner=self.user, key="nao_apagar", value="sim"
+        )
+        invalid = self.client.get("/api/backup/").json()
+        invalid["actions"][0]["value"] = 0
+
+        response = self.client.post(
+            "/api/restore/", data=json.dumps(invalid), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Valor da ação", response.json()["error"])
+        self.assertTrue(Classroom.objects.filter(pk=classroom.pk).exists())
+        self.assertTrue(Student.objects.filter(pk=student.pk, balance=12).exists())
+        self.assertTrue(Movement.objects.filter(pk=movement.pk).exists())
+        self.assertTrue(AppSetting.objects.filter(pk=setting.pk).exists())
+        self.assertEqual(classroom.actions.count(), len(DEFAULT_CLASSROOM_ACTIONS))
+
+    def test_v3_rejects_cross_classroom_action_reference_without_data_loss(self):
+        first = Classroom.objects.create(owner=self.user, name="Primeira")
+        second = Classroom.objects.create(owner=self.user, name="Segunda")
+        ensure_classroom_actions(first)
+        ensure_classroom_actions(second)
+        student = Student.objects.create(name="Iara", classroom=first, code="9501")
+        action = second.actions.first()
+        Movement.objects.create(
+            student=student,
+            movement_type=Movement.CREDIT,
+            amount=1,
+            signed_amount=1,
+            reason="Original",
+        )
+        invalid = self.client.get("/api/backup/").json()
+        invalid["movements"][0]["action_id"] = action.id
+
+        response = self.client.post(
+            "/api/restore/", data=json.dumps(invalid), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("outra turma", response.json()["error"])
+        self.assertTrue(Student.objects.filter(pk=student.pk).exists())
+        self.assertEqual(Classroom.objects.filter(owner=self.user).count(), 2)
+
+    def test_restore_does_not_change_another_owners_data(self):
+        other = get_user_model().objects.create_superuser(
+            username="backup-externo", password="senha-teste"
+        )
+        other_class = Classroom.objects.create(owner=other, name="Externa")
+        ensure_classroom_actions(other_class)
+        other_student = Student.objects.create(
+            name="João", classroom=other_class, code="9601", balance=-7
+        )
+        backup = {
+            "version": 2,
+            "classrooms": [],
+            "students": [],
+            "movements": [],
+            "settings": {},
+        }
+
+        response = self.client.post(
+            "/api/restore/", data=json.dumps(backup), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        other_student.refresh_from_db()
+        self.assertEqual(other_student.balance, -7)
+        self.assertEqual(other_class.actions.count(), len(DEFAULT_CLASSROOM_ACTIONS))

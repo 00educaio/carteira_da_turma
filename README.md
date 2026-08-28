@@ -9,13 +9,54 @@ Aplicação simples para administrar moedas dos alunos, com acesso isolado por s
 - Cada turma pertence a um superusuário; dados, backups, restaurações e resets não se misturam.
 - Criação, renomeação, arquivamento, reativação e transferência de turmas.
 - Código exclusivo para cada cartão.
-- Crédito e débito por aluno.
-- Bloqueio de saldo negativo.
+- Catálogo de recompensas e despesas configurável separadamente por turma.
+- Movimentações com valores fixos definidos pelo professor, sem valor livre no navegador.
+- Crédito e débito por aluno, incluindo cobrança com saldo negativo.
 - Histórico e estorno.
 - Reset semanal automático na primeira abertura de uma nova semana.
 - Reset manual.
+- Painel de análise financeira por semana, mês, histórico ou intervalo personalizado.
 - Impressão dos cartões.
-- Backup e restauração em JSON.
+- Backup e restauração transacional em JSON, com compatibilidade v2 e v3.
+
+## Ações e saldos
+
+Cada turma recebe automaticamente um catálogo inicial de recompensas e despesas.
+Em **Gerenciar turmas → Configurar ações**, o professor pode alterar o valor e
+ativar ou desativar cada opção. A mudança vale somente para movimentações futuras;
+o histórico preserva o nome e o valor efetivamente aplicados.
+
+A operação rápida aceita apenas uma ação ativa da turma do aluno. Débitos podem
+deixar o saldo negativo, inclusive a ação **Reposição de cartão perdido**. Saldos
+no vermelho são destacados na interface. Um estorno sempre usa o valor histórico
+da movimentação, mesmo que o preço atual da ação seja diferente.
+
+## Análise financeira
+
+A seção **Análise financeira** apresenta totais de ganhos e gastos por turma e
+por aluno, destaques com suporte a empates e a relação de alunos ativos com saldo
+negativo. Os filtros disponíveis são semana atual, mês atual, todo o histórico e
+intervalo personalizado, com opção de limitar a uma turma.
+
+Resets, estornos e movimentações desfeitas não entram nos totais. Os intervalos
+de data são inclusivos e seguem o fuso `America/Maceio`.
+
+## Backup e restauração
+
+O backup atual usa o formato **v3** e inclui turmas, ações e seus valores, status,
+alunos, saldos negativos, histórico, vínculo opcional entre movimentação e ação e
+configurações da conta. Alunos e turmas arquivados também são preservados.
+
+A restauração valida o arquivo inteiro antes de substituir qualquer dado e executa
+a troca em uma única transação. Se houver erro, os dados atuais permanecem intactos.
+Backups **v2** continuam aceitos: cada turma recebe o catálogo padrão e as
+movimentações antigas são restauradas sem vínculo de ação, preservando motivo e
+valor históricos.
+
+Além do download manual, o navegador mantém uma cópia automática no `localStorage`,
+se houver espaço disponível. Na primeira abertura, se o servidor estiver sem turmas
+e alunos, essa cópia é enviada à mesma restauração validada automaticamente. A cópia
+é separada por superusuário no navegador.
 
 ## Rodar localmente
 
