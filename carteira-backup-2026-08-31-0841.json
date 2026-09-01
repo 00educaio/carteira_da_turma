@@ -1,0 +1,578 @@
+{
+  "version": 3,
+  "exported_at": "2026-08-31T12:28:44.388386+00:00",
+  "classrooms": [
+    {
+      "id": 1,
+      "name": "Hope",
+      "active": true
+    },
+    {
+      "id": 2,
+      "name": "Wish",
+      "active": true
+    }
+  ],
+  "actions": [
+    {
+      "id": 1,
+      "classroom_id": 1,
+      "name": "Bom comportamento",
+      "nature": "credit",
+      "value": 1,
+      "position": 1,
+      "active": true,
+      "default_key": "good-behavior"
+    },
+    {
+      "id": 2,
+      "classroom_id": 1,
+      "name": "Organizou a sala",
+      "nature": "credit",
+      "value": 1,
+      "position": 2,
+      "active": true,
+      "default_key": "organized-classroom"
+    },
+    {
+      "id": 3,
+      "classroom_id": 1,
+      "name": "Ajudou um colega",
+      "nature": "credit",
+      "value": 1,
+      "position": 3,
+      "active": true,
+      "default_key": "helped-classmate"
+    },
+    {
+      "id": 4,
+      "classroom_id": 1,
+      "name": "Terminou a atividade",
+      "nature": "credit",
+      "value": 1,
+      "position": 4,
+      "active": true,
+      "default_key": "finished-activity"
+    },
+    {
+      "id": 5,
+      "classroom_id": 1,
+      "name": "Fazer caligrafia",
+      "nature": "credit",
+      "value": 1,
+      "position": 5,
+      "active": true,
+      "default_key": "handwriting-practice"
+    },
+    {
+      "id": 6,
+      "classroom_id": 1,
+      "name": "Ir ao banheiro",
+      "nature": "debit",
+      "value": 1,
+      "position": 6,
+      "active": true,
+      "default_key": "bathroom"
+    },
+    {
+      "id": 7,
+      "classroom_id": 1,
+      "name": "Beber água",
+      "nature": "debit",
+      "value": 1,
+      "position": 7,
+      "active": true,
+      "default_key": "drink-water"
+    },
+    {
+      "id": 8,
+      "classroom_id": 1,
+      "name": "Folha de papel",
+      "nature": "debit",
+      "value": 1,
+      "position": 8,
+      "active": true,
+      "default_key": "sheet-of-paper"
+    },
+    {
+      "id": 9,
+      "classroom_id": 1,
+      "name": "Indisciplina",
+      "nature": "debit",
+      "value": 1,
+      "position": 9,
+      "active": true,
+      "default_key": "indiscipline"
+    },
+    {
+      "id": 10,
+      "classroom_id": 1,
+      "name": "Reposição de cartão perdido",
+      "nature": "debit",
+      "value": 1,
+      "position": 10,
+      "active": true,
+      "default_key": "lost-card-replacement"
+    },
+    {
+      "id": 11,
+      "classroom_id": 2,
+      "name": "Bom comportamento",
+      "nature": "credit",
+      "value": 5,
+      "position": 1,
+      "active": true,
+      "default_key": "good-behavior"
+    },
+    {
+      "id": 12,
+      "classroom_id": 2,
+      "name": "Organizou a sala",
+      "nature": "credit",
+      "value": 3,
+      "position": 2,
+      "active": true,
+      "default_key": "organized-classroom"
+    },
+    {
+      "id": 13,
+      "classroom_id": 2,
+      "name": "Ajudou um colega",
+      "nature": "credit",
+      "value": 3,
+      "position": 3,
+      "active": true,
+      "default_key": "helped-classmate"
+    },
+    {
+      "id": 14,
+      "classroom_id": 2,
+      "name": "Terminou a atividade",
+      "nature": "credit",
+      "value": 3,
+      "position": 4,
+      "active": true,
+      "default_key": "finished-activity"
+    },
+    {
+      "id": 15,
+      "classroom_id": 2,
+      "name": "Fazer caligrafia",
+      "nature": "credit",
+      "value": 10,
+      "position": 5,
+      "active": true,
+      "default_key": "handwriting-practice"
+    },
+    {
+      "id": 16,
+      "classroom_id": 2,
+      "name": "Ir ao banheiro",
+      "nature": "debit",
+      "value": 3,
+      "position": 6,
+      "active": true,
+      "default_key": "bathroom"
+    },
+    {
+      "id": 17,
+      "classroom_id": 2,
+      "name": "Beber água",
+      "nature": "debit",
+      "value": 3,
+      "position": 7,
+      "active": true,
+      "default_key": "drink-water"
+    },
+    {
+      "id": 18,
+      "classroom_id": 2,
+      "name": "Folha de papel",
+      "nature": "debit",
+      "value": 1,
+      "position": 8,
+      "active": false,
+      "default_key": "sheet-of-paper"
+    },
+    {
+      "id": 19,
+      "classroom_id": 2,
+      "name": "Indisciplina",
+      "nature": "debit",
+      "value": 10,
+      "position": 9,
+      "active": true,
+      "default_key": "indiscipline"
+    },
+    {
+      "id": 20,
+      "classroom_id": 2,
+      "name": "Reposição de cartão perdido",
+      "nature": "debit",
+      "value": 10,
+      "position": 10,
+      "active": true,
+      "default_key": "lost-card-replacement"
+    }
+  ],
+  "students": [
+    {
+      "id": 1,
+      "name": "Guilherme",
+      "classroom_id": 1,
+      "class_name": "Hope",
+      "code": "5593",
+      "balance": 0,
+      "active": false
+    },
+    {
+      "id": 4,
+      "name": "Asafe",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "7164",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 2,
+      "name": "Caio",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "3864",
+      "balance": 0,
+      "active": true
+    },
+    {
+      "id": 13,
+      "name": "Clévia",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "4626",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 9,
+      "name": "David",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "2581",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 16,
+      "name": "Debora",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "5829",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 11,
+      "name": "Erick",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "4410",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 17,
+      "name": "Ester",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "1157",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 12,
+      "name": "Fabrício",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "2873",
+      "balance": 0,
+      "active": true
+    },
+    {
+      "id": 7,
+      "name": "Gabriel",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "7735",
+      "balance": 0,
+      "active": true
+    },
+    {
+      "id": 5,
+      "name": "Guilherme",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "4369",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 8,
+      "name": "Gustavo",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "3831",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 19,
+      "name": "Maria Kauane - MK",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "9098",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 3,
+      "name": "Nicolas",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "3195",
+      "balance": 0,
+      "active": true
+    },
+    {
+      "id": 6,
+      "name": "Perez",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "4445",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 10,
+      "name": "Philippe",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "6480",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 15,
+      "name": "Rihanna",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "4974",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 18,
+      "name": "Rillary",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "6155",
+      "balance": 10,
+      "active": true
+    },
+    {
+      "id": 14,
+      "name": "Yuri",
+      "classroom_id": 2,
+      "class_name": "Wish",
+      "code": "8721",
+      "balance": 10,
+      "active": true
+    }
+  ],
+  "movements": [
+    {
+      "id": 1,
+      "student_id": 19,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T08:44:34.642720-03:00"
+    },
+    {
+      "id": 2,
+      "student_id": 10,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T08:49:56.371124-03:00"
+    },
+    {
+      "id": 3,
+      "student_id": 8,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T08:51:49.026405-03:00"
+    },
+    {
+      "id": 4,
+      "student_id": 13,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T08:56:36.076102-03:00"
+    },
+    {
+      "id": 5,
+      "student_id": 14,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:00:18.687477-03:00"
+    },
+    {
+      "id": 6,
+      "student_id": 17,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:00:27.551018-03:00"
+    },
+    {
+      "id": 7,
+      "student_id": 9,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:00:43.023321-03:00"
+    },
+    {
+      "id": 8,
+      "student_id": 11,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:02:42.403676-03:00"
+    },
+    {
+      "id": 9,
+      "student_id": 15,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:09:16.573342-03:00"
+    },
+    {
+      "id": 10,
+      "student_id": 16,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:09:25.051029-03:00"
+    },
+    {
+      "id": 11,
+      "student_id": 6,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:12:21.488767-03:00"
+    },
+    {
+      "id": 12,
+      "student_id": 5,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:12:44.973067-03:00"
+    },
+    {
+      "id": 13,
+      "student_id": 4,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:12:59.993567-03:00"
+    },
+    {
+      "id": 14,
+      "student_id": 18,
+      "action_id": 15,
+      "movement_type": "credit",
+      "amount": 10,
+      "signed_amount": 10,
+      "reason": "Fazer caligrafia",
+      "balance_before": 0,
+      "balance_after": 10,
+      "reversed": false,
+      "created_at": "2026-08-31T09:13:35.148776-03:00"
+    }
+  ],
+  "settings": {
+    "last_reset_week": "2026-W36"
+  }
+}

@@ -1,13 +1,17 @@
 import json
 import random
 from functools import wraps
+from urllib.parse import urlencode
 
+import qrcode
+import qrcode.image.svg
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -146,7 +150,24 @@ def index(request):
     if not request.user.is_superuser:
         return HttpResponse("Acesso permitido apenas para superusuários.", status=403)
     ensure_weekly_reset(request.user)
-    return render(request, "wallet/index.html")
+    initial_student_id = None
+    raw_student_id = request.GET.get("student", "").strip()
+    if raw_student_id.isdigit():
+        initial_student_id = (
+            Student.objects.filter(
+                pk=int(raw_student_id),
+                classroom__owner=request.user,
+                classroom__active=True,
+                active=True,
+            )
+            .values_list("id", flat=True)
+            .first()
+        )
+    return render(
+        request,
+        "wallet/index.html",
+        {"initial_student_id": initial_student_id or ""},
+    )
 
 
 @require_http_methods(["GET", "POST"])
@@ -381,6 +402,35 @@ def students_api(request):
         "classes": classes,
         "reset_performed": reset_performed,
     })
+
+
+@require_GET
+@api_login_required
+def student_card_qr_api(request, student_id):
+    try:
+        student = Student.objects.get(
+            pk=student_id,
+            classroom__owner=request.user,
+            classroom__active=True,
+            active=True,
+        )
+    except Student.DoesNotExist:
+        return JsonResponse({"error": "Aluno não encontrado."}, status=404)
+
+    query = urlencode({"student": student.id})
+    operation_url = request.build_absolute_uri(
+        f"{reverse('wallet:index')}?{query}"
+    )
+    image = qrcode.make(
+        operation_url,
+        image_factory=qrcode.image.svg.SvgPathFillImage,
+        box_size=10,
+        border=4,
+    )
+    response = HttpResponse(image.to_string(), content_type="image/svg+xml")
+    response["Cache-Control"] = "private, max-age=300"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @require_POST

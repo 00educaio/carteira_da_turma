@@ -16,7 +16,7 @@ Aplicação simples para administrar moedas dos alunos, com acesso isolado por s
 - Reset semanal automático na primeira abertura de uma nova semana.
 - Reset manual.
 - Painel de análise financeira por semana, mês, histórico ou intervalo personalizado.
-- Impressão dos cartões.
+- Impressão dos cartões com QR Code que abre o aluno diretamente na operação rápida.
 - Backup e restauração transacional em JSON, com compatibilidade v2 e v3.
 
 ## Ações e saldos

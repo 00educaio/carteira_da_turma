@@ -29,6 +29,11 @@ urlpatterns = [
     path("api/students/", views.students_api, name="students_api"),
     path("api/students/create/", views.create_student_api, name="create_student_api"),
     path("api/students/bulk/", views.bulk_students_api, name="bulk_students_api"),
+    path(
+        "api/students/<int:student_id>/card-qr/",
+        views.student_card_qr_api,
+        name="student_card_qr_api",
+    ),
     path("api/students/<int:student_id>/movement/", views.movement_api, name="movement_api"),
     path("api/students/<int:student_id>/delete/", views.delete_student_api, name="delete_student_api"),
     path("api/movements/", views.movements_api, name="movements_api"),

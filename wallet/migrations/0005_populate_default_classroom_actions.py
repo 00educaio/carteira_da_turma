@@ -9,9 +9,10 @@ DEFAULT_ACTIONS = (
     ("handwriting-practice", "Fazer caligrafia", "credit"),
     ("bathroom", "Ir ao banheiro", "debit"),
     ("drink-water", "Beber água", "debit"),
-    ("sheet-of-paper", "Folha de papel", "debit"),
     ("indiscipline", "Indisciplina", "debit"),
     ("lost-card-replacement", "Reposição de cartão perdido", "debit"),
+    ("play-time", "Tempo de jogar", "debit"),
+
 )
 
 

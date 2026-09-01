@@ -220,3 +220,66 @@
     grid-column: auto;
   }
 }
+
+#printArea {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  body.printing-cards #printArea {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5mm;
+  }
+
+  .student-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34mm;
+    align-items: center;
+    gap: 4mm;
+    min-height: 48mm;
+    padding: 5mm;
+    border-radius: 4mm;
+  }
+
+  .student-card h3 {
+    overflow-wrap: anywhere;
+    font-size: 1.15rem;
+    line-height: 1.15;
+    margin: 1.5mm 0;
+  }
+
+  .student-card .student-card-label {
+    font-size: .62rem;
+    font-weight: 850;
+    letter-spacing: .1em;
+  }
+
+  .student-card .card-code {
+    margin-top: 2mm;
+    font-size: 1.45rem;
+  }
+
+  .student-card-qr {
+    margin: 0;
+    text-align: center;
+  }
+
+  .student-card-qr img {
+    display: block;
+    width: 34mm;
+    height: 34mm;
+  }
+
+  .student-card-qr figcaption {
+    margin-top: 1mm;
+    font-size: .54rem;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+}

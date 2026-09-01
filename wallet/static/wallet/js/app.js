@@ -7,6 +7,7 @@ const state = {
 };
 const $ = (selector) => document.querySelector(selector);
 const storageKey = (name) => `classWallet:${document.body.dataset.ownerId}:${name}`;
+const initialStudentId = Number(document.body.dataset.initialStudentId) || null;
 
 function csrfToken(){
   return document.cookie.split(";").map(v=>v.trim()).find(v=>v.startsWith("csrftoken="))?.split("=")[1] || "";
@@ -18,7 +19,10 @@ async function api(url, options={}){
   if ((options.method || "GET") !== "GET") headers["X-CSRFToken"] = csrfToken();
   const response = await fetch(url, { ...options, headers });
   const data = await response.json().catch(()=>({}));
-  if(response.status===401) window.location.href=`/login/?next=${encodeURIComponent(window.location.pathname)}`;
+  if(response.status===401){
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    window.location.href=`/login/?next=${encodeURIComponent(currentPath)}`;
+  }
   if (!response.ok) throw new Error(data.error || "Não foi possível concluir a operação.");
   return data;
 }
@@ -534,10 +538,47 @@ $("#resetButton").onclick=async()=>{
 
 $("#restoreInput").onchange=async(event)=>{const file=event.target.files[0];if(!file)return;try{const form=new FormData();form.append("file",file);await api("/api/restore/",{method:"POST",body:form});state.analyticsClassroomId=null;toast("Backup restaurado.");await loadAll();}catch(e){toast(e.message)}finally{event.target.value=""}};
 
-$("#printCardsButton").onclick=()=>{
-  const area=document.createElement("section");area.id="printArea";area.style.cssText="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;padding:20px";
-  area.innerHTML=state.students.map(s=>`<article class="student-card"><p>CARTEIRA DA TURMA</p><h3>${escapeHtml(s.name)}</h3><p>${escapeHtml(s.class_name||"Sem turma")}</p><div class="card-code">${escapeHtml(s.code)}</div><p>Apresente este código ao professor.</p></article>`).join("");
-  document.body.appendChild(area);document.body.classList.add("printing-cards");window.print();document.body.classList.remove("printing-cards");area.remove();
+function waitForImage(image){
+  if(image.complete){
+    return image.naturalWidth ? Promise.resolve() : Promise.reject(new Error("QR Code indisponível."));
+  }
+  return new Promise((resolve, reject)=>{
+    image.addEventListener("load", resolve, {once:true});
+    image.addEventListener("error", ()=>reject(new Error("QR Code indisponível.")), {once:true});
+  });
+}
+
+$("#printCardsButton").onclick=async()=>{
+  if(!state.students.length) return toast("Não há alunos para imprimir.");
+  const button = $("#printCardsButton");
+  const area = document.createElement("section");
+  area.id = "printArea";
+  area.innerHTML = state.students.map(s=>`<article class="student-card">
+    <div class="student-card-details">
+      <p class="student-card-label">CARTEIRA DA TURMA</p>
+      <h3>${escapeHtml(s.name)}</h3>
+      <p>${escapeHtml(s.class_name||"Sem turma")}</p>
+      <div class="card-code">${escapeHtml(s.code)}</div>
+    </div>
+    <figure class="student-card-qr">
+      <img src="/api/students/${s.id}/card-qr/" alt="QR Code de ${escapeHtml(s.name)}">
+      <figcaption>Escaneie para adicionar ou cobrar</figcaption>
+    </figure>
+  </article>`).join("");
+  document.body.appendChild(area);
+  button.disabled = true;
+  try{
+    await Promise.all([...area.querySelectorAll("img")].map(waitForImage));
+    document.body.classList.add("printing-cards");
+    await new Promise(resolve=>requestAnimationFrame(resolve));
+    window.print();
+  }catch(e){
+    toast("Não foi possível carregar os QR Codes para impressão.");
+  }finally{
+    document.body.classList.remove("printing-cards");
+    area.remove();
+    button.disabled = false;
+  }
 };
 
 setMovementType("credit");
@@ -545,5 +586,9 @@ const localToday = new Date(Date.now() - new Date().getTimezoneOffset()*60000).t
 $("#analyticsStart").value = localToday;
 $("#analyticsEnd").value = localToday;
 const savedClass = localStorage.getItem(storageKey("selectedClass"));
-state.currentClass = savedClass && savedClass !== "__all__" ? savedClass : null;
-loadAll().catch(e=>{toast(e.message);$("#serverStatus").textContent="Offline";});
+state.currentClass = !initialStudentId && savedClass && savedClass !== "__all__" ? savedClass : null;
+loadAll().then(async()=>{
+  if(!initialStudentId) return;
+  await selectStudent(initialStudentId);
+  $(".search-panel").scrollIntoView({behavior:"smooth", block:"start"});
+}).catch(e=>{toast(e.message);$("#serverStatus").textContent="Offline";});

@@ -1,5 +1,6 @@
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -225,6 +226,15 @@ class AuthenticationTests(TestCase):
 
         self.assertRedirects(response, "/login/?next=/")
 
+    def test_student_deep_link_is_preserved_through_login(self):
+        response = self.client.get("/", {"student": 123})
+
+        self.assertRedirects(
+            response,
+            "/login/?next=/%3Fstudent%3D123",
+            fetch_redirect_response=False,
+        )
+
     def test_sensitive_apis_reject_anonymous_access(self):
         requests = [
             ("get", "/api/students/"),
@@ -237,6 +247,7 @@ class AuthenticationTests(TestCase):
             ("post", "/api/classrooms/1/transfer/"),
             ("post", "/api/students/create/"),
             ("post", "/api/students/bulk/"),
+            ("get", "/api/students/1/card-qr/"),
             ("post", "/api/students/1/movement/"),
             ("post", "/api/students/1/delete/"),
             ("get", "/api/movements/"),
@@ -269,6 +280,63 @@ class AuthenticationTests(TestCase):
 
         self.assertEqual(self.client.get("/").status_code, 403)
         self.assertEqual(self.client.get("/api/students/").status_code, 403)
+
+
+class PrintedCardQrTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="professor-qr", password="senha-teste"
+        )
+        self.client.force_login(self.user)
+        self.classroom = Classroom.objects.create(owner=self.user, name="7º A")
+        self.student = Student.objects.create(
+            name="Ana QR", classroom=self.classroom, code="7010"
+        )
+
+    def test_deep_link_marks_student_to_open_in_quick_operation(self):
+        response = self.client.get("/", {"student": self.student.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, f'data-initial-student-id="{self.student.id}"'
+        )
+
+    @patch("wallet.views.qrcode.make")
+    def test_qr_code_encodes_absolute_student_deep_link(self, make_qr):
+        make_qr.return_value.to_string.return_value = b"<svg></svg>"
+
+        response = self.client.get(f"/api/students/{self.student.id}/card-qr/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/svg+xml")
+        self.assertEqual(response.content, b"<svg></svg>")
+        self.assertEqual(
+            make_qr.call_args.args[0],
+            f"http://testserver/?student={self.student.id}",
+        )
+
+    def test_qr_endpoint_returns_a_real_svg(self):
+        response = self.client.get(f"/api/students/{self.student.id}/card-qr/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b"<svg"))
+
+    def test_deep_link_and_qr_do_not_expose_another_owners_student(self):
+        other = get_user_model().objects.create_superuser(
+            username="outro-qr", password="senha-teste"
+        )
+        other_classroom = Classroom.objects.create(owner=other, name="7º B")
+        other_student = Student.objects.create(
+            name="Aluno privado", classroom=other_classroom, code="7020"
+        )
+
+        page = self.client.get("/", {"student": other_student.id})
+        qr_response = self.client.get(
+            f"/api/students/{other_student.id}/card-qr/"
+        )
+
+        self.assertContains(page, 'data-initial-student-id=""')
+        self.assertEqual(qr_response.status_code, 404)
 
 
 class ClassroomActionTests(TestCase):
