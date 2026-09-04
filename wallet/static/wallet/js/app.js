@@ -23,7 +23,7 @@ async function api(url, options={}){
     const currentPath = `${window.location.pathname}${window.location.search}`;
     window.location.href=`/login/?next=${encodeURIComponent(currentPath)}`;
   }
-  if (!response.ok) throw new Error(data.error || "Não foi possível concluir a operação.");
+  if (!response.ok) throw new Error(data.error || "Could not complete the operation.");
   return data;
 }
 
@@ -32,8 +32,8 @@ function toast(message){
   clearTimeout(toast.timer); toast.timer = setTimeout(()=>el.classList.add("hidden"), 3200);
 }
 
-function money(value){ return `${value} moedas`; }
-function dateTime(value){ return new Intl.DateTimeFormat("pt-BR", {dateStyle:"short", timeStyle:"short"}).format(new Date(value)); }
+function coins(value){ return `${value} coins`; }
+function dateTime(value){ return new Intl.DateTimeFormat("en-US", {dateStyle:"short", timeStyle:"short"}).format(new Date(value)); }
 
 function filteredApiUrl(path, extra={}){
   const params = new URLSearchParams(extra);
@@ -44,31 +44,31 @@ function filteredApiUrl(path, extra={}){
 
 function renderClassFilter(){
   const select = $("#classFilter");
-  select.innerHTML = `<option value="__all__">Todas as turmas</option>` + state.classes.map(className=>
-    `<option value="${escapeHtml(className)}">${escapeHtml(className || "Sem turma")}</option>`
+  select.innerHTML = `<option value="__all__">All classrooms</option>` + state.classes.map(className=>
+    `<option value="${escapeHtml(className)}">${escapeHtml(className || "No classroom")}</option>`
   ).join("");
   select.value = state.currentClass === null ? "__all__" : state.currentClass;
   $("#studentsTitle").textContent = state.currentClass === null
-    ? "Alunos de todas as turmas"
-    : `Alunos — ${state.currentClass || "Sem turma"}`;
+    ? "Students in all classrooms"
+    : `Students — ${state.currentClass || "No classroom"}`;
   if(state.currentClass !== null && !$("#studentClass").value) $("#studentClass").value = state.currentClass;
 }
 
 function renderClassrooms(){
-  const targetOptions = `<option value="">Selecione</option>` + state.transferTargets.map(user=>
+  const targetOptions = `<option value="">Select</option>` + state.transferTargets.map(user=>
     `<option value="${user.id}">${escapeHtml(user.username)}</option>`
   ).join("");
   $("#classroomsTable").innerHTML = state.classrooms.map(classroom=>`<tr>
-    <td data-label="Turma"><strong>${escapeHtml(classroom.name || "Sem turma")}</strong></td>
-    <td data-label="Status"><span class="classroom-status ${classroom.active ? "" : "archived"}">${classroom.active ? "Ativa" : "Arquivada"}</span></td>
-    <td data-label="Alunos">${classroom.active_student_count} ativo(s) · ${classroom.student_count} total</td>
-    <td data-label="Transferir para"><select class="classroom-transfer" data-id="${classroom.id}" ${state.transferTargets.length ? "" : "disabled"}>${targetOptions}</select></td>
-    <td data-label="Ações"><div class="classroom-actions">
-      <button class="button primary configure-actions" data-id="${classroom.id}" ${classroom.active ? "" : "disabled"}>Configurar ações</button>
-      <button class="button ghost rename-classroom" data-id="${classroom.id}">Renomear</button>
-      <button class="button ghost toggle-classroom" data-id="${classroom.id}">${classroom.active ? "Arquivar" : "Reativar"}</button>
-      <button class="button secondary transfer-classroom" data-id="${classroom.id}" ${state.transferTargets.length ? "" : "disabled"}>Transferir</button>
-    </div></td></tr>`).join("") || `<tr><td colspan="5">Nenhuma turma cadastrada.</td></tr>`;
+    <td data-label="Classroom"><strong>${escapeHtml(classroom.name || "No classroom")}</strong></td>
+    <td data-label="Status"><span class="classroom-status ${classroom.active ? "" : "archived"}">${classroom.active ? "Active" : "Archived"}</span></td>
+    <td data-label="Students">${classroom.active_student_count} active · ${classroom.student_count} total</td>
+    <td data-label="Transfer to"><select class="classroom-transfer" data-id="${classroom.id}" ${state.transferTargets.length ? "" : "disabled"}>${targetOptions}</select></td>
+    <td data-label="Actions"><div class="classroom-actions">
+      <button class="button primary configure-actions" data-id="${classroom.id}" ${classroom.active ? "" : "disabled"}>Configure actions</button>
+      <button class="button ghost rename-classroom" data-id="${classroom.id}">Rename</button>
+      <button class="button ghost toggle-classroom" data-id="${classroom.id}">${classroom.active ? "Archive" : "Reactivate"}</button>
+      <button class="button secondary transfer-classroom" data-id="${classroom.id}" ${state.transferTargets.length ? "" : "disabled"}>Transfer</button>
+    </div></td></tr>`).join("") || `<tr><td colspan="5">No classrooms found.</td></tr>`;
 
   document.querySelectorAll(".configure-actions").forEach(button=>button.onclick=()=>openActionsConfig(Number(button.dataset.id)));
   document.querySelectorAll(".rename-classroom").forEach(button=>button.onclick=()=>renameClassroom(Number(button.dataset.id)));
@@ -83,22 +83,22 @@ function clearSelectedClass(){
 
 async function renameClassroom(id){
   const classroom = state.classrooms.find(item=>item.id===id);
-  const name = prompt("Novo nome da turma:", classroom?.name || "");
+  const name = prompt("New classroom name:", classroom?.name || "");
   if(name===null || !name.trim()) return;
   try{
     await api(`/api/classrooms/${id}/rename/`, {method:"POST", body:JSON.stringify({name})});
-    clearSelectedClass(); toast("Turma renomeada."); await loadAll();
+    clearSelectedClass(); toast("Classroom renamed."); await loadAll();
   }catch(e){ toast(e.message); }
 }
 
 async function toggleClassroom(id){
   const classroom = state.classrooms.find(item=>item.id===id);
   if(!classroom) return;
-  const action = classroom.active ? "arquivar" : "reativar";
-  if(!confirm(`${action[0].toUpperCase()+action.slice(1)} a turma ${classroom.name || "Sem turma"}?`)) return;
+  const action = classroom.active ? "archive" : "reactivate";
+  if(!confirm(`${action[0].toUpperCase()+action.slice(1)} classroom ${classroom.name || "No classroom"}?`)) return;
   try{
     await api(`/api/classrooms/${id}/archive/`, {method:"POST", body:JSON.stringify({active:!classroom.active})});
-    clearSelectedClass(); toast(`Turma ${classroom.active ? "arquivada" : "reativada"}.`); await loadAll();
+    clearSelectedClass(); toast(`Classroom ${classroom.active ? "archived" : "reactivated"}.`); await loadAll();
   }catch(e){ toast(e.message); }
 }
 
@@ -106,19 +106,19 @@ async function transferClassroom(id){
   const classroom = state.classrooms.find(item=>item.id===id);
   const select = document.querySelector(`.classroom-transfer[data-id="${id}"]`);
   const target = state.transferTargets.find(item=>item.id===Number(select?.value));
-  if(!classroom || !target) return toast("Selecione o superusuário de destino.");
-  if(!confirm(`Transferir ${classroom.name || "Sem turma"} e todos os seus dados para ${target.username}?`)) return;
+  if(!classroom || !target) return toast("Select a destination superuser.");
+  if(!confirm(`Transfer ${classroom.name || "No classroom"} and all its data to ${target.username}?`)) return;
   try{
     await api(`/api/classrooms/${id}/transfer/`, {method:"POST", body:JSON.stringify({target_user_id:target.id})});
-    clearSelectedClass(); toast("Turma transferida."); await loadAll();
+    clearSelectedClass(); toast("Classroom transferred."); await loadAll();
   }catch(e){ toast(e.message); }
 }
 
 function renderActionsConfig(){
   if(!state.actionsConfig) return;
   const groups = [
-    {nature:"credit", title:"Recompensas", help:"Moedas adicionadas ao saldo do aluno."},
-    {nature:"debit", title:"Despesas", help:"Moedas retiradas do saldo, mesmo que ele fique negativo."}
+    {nature:"credit", title:"Rewards", help:"Coins added to the student's balance."},
+    {nature:"debit", title:"Expenses", help:"Coins deducted from the balance, even if it becomes negative."}
   ];
   $("#actionsConfigContent").innerHTML = groups.map(group=>{
     const actions = state.actionsConfig.actions.filter(action=>action.nature===group.nature);
@@ -126,10 +126,10 @@ function renderActionsConfig(){
       <div><h3>${group.title}</h3><p class="help">${group.help}</p></div>
       <div class="action-config-list">${actions.map(action=>`<div class="action-config-row" data-id="${action.id}" data-nature="${action.nature}">
         <label class="action-config-name" for="action-value-${action.id}">${escapeHtml(action.name)}</label>
-        <label class="action-value-label">Valor
+        <label class="action-value-label">Value (coins)
           <input id="action-value-${action.id}" class="action-value-input" type="number" min="1" step="1" required value="${action.value}">
         </label>
-        <label class="action-active-label"><input class="action-active-input" type="checkbox" ${action.active ? "checked" : ""}> Ativa</label>
+        <label class="action-active-label"><input class="action-active-input" type="checkbox" ${action.active ? "checked" : ""}> Active</label>
       </div>`).join("")}</div>
     </section>`;
   }).join("");
@@ -137,10 +137,10 @@ function renderActionsConfig(){
 
 async function openActionsConfig(id){
   const classroom = state.classrooms.find(item=>item.id===id);
-  if(!classroom?.active) return toast("Apenas turmas ativas podem ser configuradas.");
+  if(!classroom?.active) return toast("Only active classrooms can be configured.");
   const panel = $("#actionsConfigPanel");
-  $("#actionsConfigTitle").textContent = `Configurar ações — ${classroom.name || "Sem turma"}`;
-  $("#actionsConfigContent").innerHTML = `<p class="help">Carregando ações…</p>`;
+  $("#actionsConfigTitle").textContent = `Configure actions — ${classroom.name || "No classroom"}`;
+  $("#actionsConfigContent").innerHTML = `<p class="help">Loading actions…</p>`;
   panel.classList.remove("hidden");
   panel.scrollIntoView({behavior:"smooth", block:"start"});
   try{
@@ -162,7 +162,7 @@ async function saveActionsConfig(){
     const value = Number(input.value);
     if(!input.value.trim() || !Number.isInteger(value) || value <= 0){
       input.focus();
-      return toast("Informe somente valores inteiros maiores que zero.");
+      return toast("Enter whole numbers greater than zero only.");
     }
     actions.push({
       id:Number(row.dataset.id),
@@ -180,7 +180,7 @@ async function saveActionsConfig(){
     });
     state.actionsConfig = data;
     renderActionsConfig();
-    toast("Configuração de ações salva.");
+    toast("Action settings saved.");
     if(state.selected?.classroom_id===classroomId) await loadStudentActions(state.selected.id);
   }catch(e){
     toast(e.message);
@@ -191,9 +191,9 @@ async function saveActionsConfig(){
 
 function renderStudents(){
   $("#studentsTable").innerHTML = state.students.map(s=>`<tr>
-    <td data-label="Aluno"><strong>${escapeHtml(s.name)}</strong></td><td data-label="Turma">${escapeHtml(s.class_name || "—")}</td>
-    <td data-label="Código"><code>${escapeHtml(s.code)}</code></td><td data-label="Saldo" class="balance ${s.balance<0?"negative":""}">${money(s.balance)}</td>
-    <td data-label="Ações"><div class="student-actions"><button class="button ghost select-student" data-id="${s.id}">Usar</button><button class="button danger delete-student" data-id="${s.id}">Apagar</button></div></td></tr>`).join("") || `<tr><td colspan="5">Nenhum aluno cadastrado.</td></tr>`;
+    <td data-label="Student"><strong>${escapeHtml(s.name)}</strong></td><td data-label="Classroom">${escapeHtml(s.class_name || "—")}</td>
+    <td data-label="Code"><code>${escapeHtml(s.code)}</code></td><td data-label="Balance" class="balance ${s.balance<0?"negative":""}">${coins(s.balance)}</td>
+    <td data-label="Actions"><div class="student-actions"><button class="button ghost select-student" data-id="${s.id}">Use</button><button class="button danger delete-student" data-id="${s.id}">Delete</button></div></td></tr>`).join("") || `<tr><td colspan="5">No students found.</td></tr>`;
   document.querySelectorAll(".select-student").forEach(btn=>btn.onclick=()=>selectStudent(Number(btn.dataset.id)));
   document.querySelectorAll(".delete-student").forEach(btn=>btn.onclick=()=>deleteStudent(Number(btn.dataset.id)));
   renderSearch();
@@ -201,7 +201,7 @@ function renderStudents(){
 
 async function deleteStudent(id){
   const student = state.students.find(item=>item.id===id);
-  if(!student || !confirm(`Apagar o aluno ${student.name}?`)) return;
+  if(!student || !confirm(`Delete student ${student.name}?`)) return;
   try{
     await api(`/api/students/${id}/delete/`, {method:"POST", body:"{}"});
     if(state.selected?.id===id){
@@ -212,7 +212,7 @@ async function deleteStudent(id){
       $("#movementBox").classList.add("hidden");
       $("#searchInput").value="";
     }
-    toast("Aluno apagado.");
+    toast("Student deleted.");
     await loadAll();
   }catch(e){ toast(e.message); }
 }
@@ -220,13 +220,13 @@ async function deleteStudent(id){
 function renderSearch(){
   const q = $("#searchInput").value.trim().toLowerCase();
   const list = q ? state.students.filter(s=>[s.name,s.class_name,s.code].some(v=>(v||"").toLowerCase().includes(q))).slice(0,8) : [];
-  $("#searchResults").innerHTML = list.map(s=>`<div class="student-result" data-id="${s.id}"><div><div class="student-name">${escapeHtml(s.name)}</div><div class="student-meta">${escapeHtml(s.class_name || "Sem turma")} · Código ${escapeHtml(s.code)}</div></div><div class="balance ${s.balance<0?"negative":""}">${money(s.balance)}</div></div>`).join("");
+  $("#searchResults").innerHTML = list.map(s=>`<div class="student-result" data-id="${s.id}"><div><div class="student-name">${escapeHtml(s.name)}</div><div class="student-meta">${escapeHtml(s.class_name || "No classroom")} · Code ${escapeHtml(s.code)}</div></div><div class="balance ${s.balance<0?"negative":""}">${coins(s.balance)}</div></div>`).join("");
   document.querySelectorAll(".student-result").forEach(el=>el.onclick=()=>selectStudent(Number(el.dataset.id)));
 }
 
 function renderSelectedStudent(){
   if(!state.selected) return;
-  $("#selectedStudent").innerHTML = `<div><div class="student-name">${escapeHtml(state.selected.name)}</div><div class="student-meta">${escapeHtml(state.selected.class_name || "Sem turma")} · Código ${escapeHtml(state.selected.code)}</div></div><div class="balance ${state.selected.balance<0?"negative":""}">${money(state.selected.balance)}</div>`;
+  $("#selectedStudent").innerHTML = `<div><div class="student-name">${escapeHtml(state.selected.name)}</div><div class="student-meta">${escapeHtml(state.selected.class_name || "No classroom")} · Code ${escapeHtml(state.selected.code)}</div></div><div class="balance ${state.selected.balance<0?"negative":""}">${coins(state.selected.balance)}</div>`;
 }
 
 async function selectStudent(id){
@@ -237,7 +237,7 @@ async function selectStudent(id){
   renderSelectedStudent();
   $("#selectedStudent").classList.remove("hidden"); $("#movementBox").classList.remove("hidden");
   $("#searchResults").innerHTML = ""; $("#searchInput").value = state.selected.code;
-  $("#movementActions").innerHTML = `<p class="help">Carregando ações da turma…</p>`;
+  $("#movementActions").innerHTML = `<p class="help">Loading classroom actions…</p>`;
   await loadStudentActions(id);
 }
 
@@ -245,8 +245,8 @@ function renderMovementActions(){
   const actions = state.studentActions.filter(action=>action.active && action.nature===state.movementType);
   if(!actions.some(action=>action.id===state.selectedActionId)) state.selectedActionId = null;
   $("#movementActions").innerHTML = actions.map(action=>`<button type="button" class="movement-action ${action.id===state.selectedActionId?"selected":""}" data-id="${action.id}">
-    <span>${escapeHtml(action.name)}</span><strong>${money(action.value)}</strong>
-  </button>`).join("") || `<p class="empty-actions">Nenhuma ação ativa nesta categoria. Ative uma opção na configuração da turma.</p>`;
+    <span>${escapeHtml(action.name)}</span><strong>${coins(action.value)}</strong>
+  </button>`).join("") || `<p class="empty-actions">No active actions in this category. Enable one in the classroom settings.</p>`;
   document.querySelectorAll(".movement-action").forEach(button=>button.onclick=()=>{
     state.selectedActionId = Number(button.dataset.id);
     renderMovementActions();
@@ -278,10 +278,10 @@ function setMovementType(type){
 
 function renderMovements(){
   $("#movementsTable").innerHTML = state.movements.map(m=>`<tr>
-    <td data-label="Data">${dateTime(m.created_at)}</td><td data-label="Aluno">${escapeHtml(m.student_name)}</td><td data-label="Motivo">${escapeHtml(m.reason)}${m.reversed?" · desfeito":""}</td>
-    <td data-label="Valor" class="${m.signed_amount>=0?"amount-positive":"amount-negative"}">${m.signed_amount>=0?"+":""}${m.signed_amount}</td>
-    <td data-label="Saldo">${m.balance_after}</td><td data-label="Ações">${(!m.reversed && ["credit","debit"].includes(m.movement_type))?`<button class="button ghost undo" data-id="${m.id}">Desfazer</button>`:""}</td></tr>`).join("") || `<tr><td colspan="6">Nenhuma movimentação.</td></tr>`;
-  document.querySelectorAll(".undo").forEach(el=>el.onclick=async()=>{try{await api(`/api/movements/${el.dataset.id}/undo/`,{method:"POST",body:"{}"});toast("Movimentação desfeita.");await loadAll();}catch(e){toast(e.message)}});
+    <td data-label="Date">${dateTime(m.created_at)}</td><td data-label="Student">${escapeHtml(m.student_name)}</td><td data-label="Reason">${escapeHtml(m.reason)}${m.reversed?" · undone":""}</td>
+    <td data-label="Amount" class="${m.signed_amount>=0?"amount-positive":"amount-negative"}">${m.signed_amount>=0?"+":""}${coins(m.signed_amount)}</td>
+    <td data-label="Balance">${coins(m.balance_after)}</td><td data-label="Actions">${(!m.reversed && ["credit","debit"].includes(m.movement_type))?`<button class="button ghost undo" data-id="${m.id}">Undo</button>`:""}</td></tr>`).join("") || `<tr><td colspan="6">No transactions found.</td></tr>`;
+  document.querySelectorAll(".undo").forEach(el=>el.onclick=async()=>{try{await api(`/api/movements/${el.dataset.id}/undo/`,{method:"POST",body:"{}"});toast("Transaction undone.");await loadAll();}catch(e){toast(e.message)}});
 }
 
 function renderAnalyticsClassroomFilter(){
@@ -289,32 +289,32 @@ function renderAnalyticsClassroomFilter(){
   if(state.analyticsClassroomId && !activeClassrooms.some(classroom=>classroom.id===state.analyticsClassroomId)){
     state.analyticsClassroomId = null;
   }
-  $("#analyticsClassroom").innerHTML = `<option value="">Todas as turmas</option>` + activeClassrooms.map(classroom=>
-    `<option value="${classroom.id}">${escapeHtml(classroom.name || "Sem turma")}</option>`
+  $("#analyticsClassroom").innerHTML = `<option value="">All classrooms</option>` + activeClassrooms.map(classroom=>
+    `<option value="${classroom.id}">${escapeHtml(classroom.name || "No classroom")}</option>`
   ).join("");
   $("#analyticsClassroom").value = state.analyticsClassroomId || "";
 }
 
 function analyticsLeaderText(items, field, includeClass=false){
-  if(!items.length) return "Sem movimentação";
+  if(!items.length) return "No transactions";
   const names = items.map(item=>includeClass
-    ? `${item.name} (${item.class_name || "Sem turma"})`
+    ? `${item.name} (${item.class_name || "No classroom"})`
     : item.name
   ).join(", ");
-  return `${names} — ${money(items[0][field])}`;
+  return `${names} — ${coins(items[0][field])}`;
 }
 
 function renderAnalytics(){
   const data = state.analytics;
   if(!data) return;
   const cards = [
-    ["Total gasto", money(data.totals.spent), "spent"],
-    ["Total ganho", money(data.totals.earned), "earned"],
-    ["Turma que mais gastou", analyticsLeaderText(data.leaders.most_spent_classrooms, "spent"), ""],
-    ["Turma que menos gastou", analyticsLeaderText(data.leaders.least_spent_classrooms, "spent"), ""],
-    ["Aluno que mais gastou", analyticsLeaderText(data.leaders.most_spent_students, "spent", true), ""],
-    ["Aluno que mais ganhou", analyticsLeaderText(data.leaders.most_earned_students, "earned", true), ""],
-    ["Alunos no vermelho", String(data.negative_students.length), "negative"]
+    ["Total spent", coins(data.totals.spent), "spent"],
+    ["Total earned", coins(data.totals.earned), "earned"],
+    ["Highest-spending classroom", analyticsLeaderText(data.leaders.most_spent_classrooms, "spent"), ""],
+    ["Lowest-spending classroom", analyticsLeaderText(data.leaders.least_spent_classrooms, "spent"), ""],
+    ["Highest-spending student", analyticsLeaderText(data.leaders.most_spent_students, "spent", true), ""],
+    ["Highest-earning student", analyticsLeaderText(data.leaders.most_earned_students, "earned", true), ""],
+    ["Negative balances", String(data.negative_students.length), "negative"]
   ];
   $("#analyticsCards").innerHTML = cards.map(([label,value,tone])=>`<article class="analytics-card ${tone}">
     <span>${label}</span><strong>${escapeHtml(value)}</strong>
@@ -322,37 +322,37 @@ function renderAnalytics(){
   $("#analyticsEmpty").classList.toggle("hidden", data.totals.earned!==0 || data.totals.spent!==0);
 
   $("#analyticsClassroomsTable").innerHTML = data.classrooms.map(item=>`<tr>
-    <td data-label="Turma"><strong>${escapeHtml(item.name || "Sem turma")}</strong></td>
-    <td data-label="Total ganho" class="amount-positive">${money(item.earned)}</td>
-    <td data-label="Total gasto" class="amount-negative">${money(item.spent)}</td>
-  </tr>`).join("") || `<tr><td colspan="3">Nenhuma turma ativa encontrada.</td></tr>`;
+    <td data-label="Classroom"><strong>${escapeHtml(item.name || "No classroom")}</strong></td>
+    <td data-label="Total earned" class="amount-positive">${coins(item.earned)}</td>
+    <td data-label="Total spent" class="amount-negative">${coins(item.spent)}</td>
+  </tr>`).join("") || `<tr><td colspan="3">No active classrooms found.</td></tr>`;
 
   $("#analyticsStudentsTable").innerHTML = data.students.map(item=>`<tr>
-    <td data-label="Aluno"><strong>${escapeHtml(item.name)}</strong></td>
-    <td data-label="Turma">${escapeHtml(item.class_name || "Sem turma")}</td>
-    <td data-label="Status">${item.active ? "Ativo" : "Inativo"}</td>
-    <td data-label="Total ganho" class="amount-positive">${money(item.earned)}</td>
-    <td data-label="Total gasto" class="amount-negative">${money(item.spent)}</td>
-  </tr>`).join("") || `<tr><td colspan="5">Nenhum aluno encontrado.</td></tr>`;
+    <td data-label="Student"><strong>${escapeHtml(item.name)}</strong></td>
+    <td data-label="Classroom">${escapeHtml(item.class_name || "No classroom")}</td>
+    <td data-label="Status">${item.active ? "Active" : "Inactive"}</td>
+    <td data-label="Total earned" class="amount-positive">${coins(item.earned)}</td>
+    <td data-label="Total spent" class="amount-negative">${coins(item.spent)}</td>
+  </tr>`).join("") || `<tr><td colspan="5">No students found.</td></tr>`;
 
   $("#analyticsNegativeTable").innerHTML = data.negative_students.map(item=>`<tr>
-    <td data-label="Aluno"><strong>${escapeHtml(item.name)}</strong></td>
-    <td data-label="Turma">${escapeHtml(item.class_name || "Sem turma")}</td>
-    <td data-label="Saldo atual" class="balance negative">${money(item.balance)}</td>
-  </tr>`).join("") || `<tr><td colspan="3">Nenhum aluno ativo está no vermelho.</td></tr>`;
+    <td data-label="Student"><strong>${escapeHtml(item.name)}</strong></td>
+    <td data-label="Classroom">${escapeHtml(item.class_name || "No classroom")}</td>
+    <td data-label="Current balance" class="balance negative">${coins(item.balance)}</td>
+  </tr>`).join("") || `<tr><td colspan="3">No active students have a negative balance.</td></tr>`;
 }
 
 function formatAnalyticsDate(value){
   if(!value) return "";
   const [year,month,day] = value.split("-");
-  return `${day}/${month}/${year}`;
+  return `${month}/${day}/${year}`;
 }
 
 async function loadAnalytics(){
   const requestId = ++state.analyticsRequest;
   const status = $("#analyticsStatus");
   const error = $("#analyticsError");
-  status.textContent = "Carregando…";
+  status.textContent = "Loading…";
   status.classList.remove("online");
   error.classList.add("hidden");
   const params = new URLSearchParams({period:state.analyticsPeriod});
@@ -361,8 +361,8 @@ async function loadAnalytics(){
     const start = $("#analyticsStart").value;
     const end = $("#analyticsEnd").value;
     if(!start || !end){
-      status.textContent = "Aguardando datas";
-      error.textContent = "Informe as datas inicial e final do intervalo.";
+      status.textContent = "Waiting for dates";
+      error.textContent = "Enter the start and end dates.";
       error.classList.remove("hidden");
       return;
     }
@@ -375,19 +375,19 @@ async function loadAnalytics(){
     renderAnalytics();
     const period = state.analytics.period;
     status.textContent = period.start
-      ? `${formatAnalyticsDate(period.start)} a ${formatAnalyticsDate(period.end)}`
-      : "Todo o histórico";
+      ? `${formatAnalyticsDate(period.start)} to ${formatAnalyticsDate(period.end)}`
+      : "All history";
     status.classList.add("online");
   }catch(e){
     if(requestId!==state.analyticsRequest) return;
     state.analytics = null;
-    status.textContent = "Erro";
+    status.textContent = "Error";
     error.textContent = e.message;
     error.classList.remove("hidden");
     $("#analyticsCards").innerHTML = "";
-    $("#analyticsClassroomsTable").innerHTML = `<tr><td colspan="3">Não foi possível carregar os dados.</td></tr>`;
-    $("#analyticsStudentsTable").innerHTML = `<tr><td colspan="5">Não foi possível carregar os dados.</td></tr>`;
-    $("#analyticsNegativeTable").innerHTML = `<tr><td colspan="3">Não foi possível carregar os dados.</td></tr>`;
+    $("#analyticsClassroomsTable").innerHTML = `<tr><td colspan="3">Could not load the data.</td></tr>`;
+    $("#analyticsStudentsTable").innerHTML = `<tr><td colspan="5">Could not load the data.</td></tr>`;
+    $("#analyticsNegativeTable").innerHTML = `<tr><td colspan="3">Could not load the data.</td></tr>`;
   }
 }
 
@@ -400,10 +400,10 @@ async function maybeRestoreLocalBackup(studentData, classroomData){
   try{
     const backup = JSON.parse(stored);
     await api("/api/restore/", {method:"POST", body:JSON.stringify(backup)});
-    toast("A cópia local foi restaurada porque o servidor estava vazio.");
+    toast("The local backup was restored because the server was empty.");
     return true;
   }catch(e){
-    toast(`A cópia local não pôde ser restaurada: ${e.message}`);
+    toast(`The local backup could not be restored: ${e.message}`);
     return false;
   }
 }
@@ -413,8 +413,8 @@ async function saveLocalBackup(){
     const backup = await api("/api/backup/");
     localStorage.setItem(storageKey("backup"), JSON.stringify(backup));
   }catch(_error){
-    // Download manual e operações principais continuam disponíveis se o navegador
-    // bloquear ou não tiver espaço para a cópia local.
+    // Manual downloads and main operations remain available if the browser blocks
+    // local storage or does not have enough space for the local copy.
   }
 }
 
@@ -452,7 +452,7 @@ async function loadAll(){
   await loadAnalytics();
   await saveLocalBackup();
   $("#serverStatus").textContent = "Online"; $("#serverStatus").classList.add("online");
-  if(studentData.reset_performed) toast("Os saldos foram resetados para a nova semana.");
+  if(studentData.weekly_coins_awarded) toast(`${studentData.weekly_coins_awarded} student(s) received 15 weekly coins.`);
 }
 
 function escapeHtml(value){ return String(value ?? "").replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
@@ -491,24 +491,24 @@ $("#applyAnalyticsFilters").onclick=()=>{
 
 $("#createClassButton").onclick=async()=>{try{
   const name=$("#newClassName").value.trim();
-  if(!name) return toast("Informe o nome da turma.");
+  if(!name) return toast("Enter a classroom name.");
   await api("/api/classrooms/",{method:"POST",body:JSON.stringify({name})});
-  $("#newClassName").value="";toast("Turma criada.");await loadAll();
+  $("#newClassName").value="";toast("Classroom created.");await loadAll();
 }catch(e){toast(e.message)}};
 
 $("#saveStudent").onclick=async()=>{try{
   await api("/api/students/create/",{method:"POST",body:JSON.stringify({name:$("#studentName").value,class_name:$("#studentClass").value,code:$("#studentCode").value})});
-  $("#studentName").value="";$("#studentClass").value="";$("#studentCode").value="";toast("Aluno cadastrado.");await loadAll();
+  $("#studentName").value="";$("#studentClass").value="";$("#studentCode").value="";toast("Student added.");await loadAll();
 }catch(e){toast(e.message)}};
 
 $("#saveBulk").onclick=async()=>{try{
   const data=await api("/api/students/bulk/",{method:"POST",body:JSON.stringify({lines:$("#bulkStudents").value,default_class_name:state.currentClass ?? ""})});
-  $("#bulkStudents").value="";toast(`${data.created.length} aluno(s) cadastrado(s). ${data.errors.length?data.errors.join(" "):""}`);await loadAll();
+  $("#bulkStudents").value="";toast(`${data.created.length} student(s) added. ${data.errors.length?data.errors.join(" "):""}`);await loadAll();
 }catch(e){toast(e.message)}};
 
 $("#confirmMovement").onclick=async()=>{
-  if(!state.selected) return toast("Selecione um aluno.");
-  if(!state.selectedActionId) return toast("Selecione uma ação para continuar.");
+  if(!state.selected) return toast("Select a student.");
+  if(!state.selectedActionId) return toast("Select an action to continue.");
   const studentId = state.selected.id;
   const button = $("#confirmMovement");
   button.disabled = true;
@@ -516,7 +516,7 @@ $("#confirmMovement").onclick=async()=>{
     await api(`/api/students/${studentId}/movement/`, {
       method:"POST", body:JSON.stringify({action_id:state.selectedActionId})
     });
-    toast("Movimentação registrada.");
+    toast("Transaction recorded.");
     await loadAll();
     await selectStudent(studentId);
   }catch(e){
@@ -527,42 +527,42 @@ $("#confirmMovement").onclick=async()=>{
 };
 
 $("#resetButton").onclick=async()=>{
-  const scope = state.currentClass === null ? "todos os alunos de todas as turmas" : `todos os alunos de ${state.currentClass || "Sem turma"}`;
-  if(!confirm(`Zerar o saldo de ${scope}?`))return;
+  const scope = state.currentClass === null ? "all students in all classrooms" : `all students in ${state.currentClass || "No classroom"}`;
+  if(!confirm(`Reset the balance of ${scope}?`))return;
   try{
     const payload = state.currentClass === null ? {} : {class_name:state.currentClass};
     const data=await api("/api/reset/",{method:"POST",body:JSON.stringify(payload)});
-    toast(`${data.reset_count} saldo(s) resetado(s).`);await loadAll();
+    toast(`${data.reset_count} balance(s) reset.`);await loadAll();
   }catch(e){toast(e.message)}
 };
 
-$("#restoreInput").onchange=async(event)=>{const file=event.target.files[0];if(!file)return;try{const form=new FormData();form.append("file",file);await api("/api/restore/",{method:"POST",body:form});state.analyticsClassroomId=null;toast("Backup restaurado.");await loadAll();}catch(e){toast(e.message)}finally{event.target.value=""}};
+$("#restoreInput").onchange=async(event)=>{const file=event.target.files[0];if(!file)return;try{const form=new FormData();form.append("file",file);await api("/api/restore/",{method:"POST",body:form});state.analyticsClassroomId=null;toast("Backup restored.");await loadAll();}catch(e){toast(e.message)}finally{event.target.value=""}};
 
 function waitForImage(image){
   if(image.complete){
-    return image.naturalWidth ? Promise.resolve() : Promise.reject(new Error("QR Code indisponível."));
+    return image.naturalWidth ? Promise.resolve() : Promise.reject(new Error("QR code unavailable."));
   }
   return new Promise((resolve, reject)=>{
     image.addEventListener("load", resolve, {once:true});
-    image.addEventListener("error", ()=>reject(new Error("QR Code indisponível.")), {once:true});
+    image.addEventListener("error", ()=>reject(new Error("QR code unavailable.")), {once:true});
   });
 }
 
 $("#printCardsButton").onclick=async()=>{
-  if(!state.students.length) return toast("Não há alunos para imprimir.");
+  if(!state.students.length) return toast("There are no students to print.");
   const button = $("#printCardsButton");
   const area = document.createElement("section");
   area.id = "printArea";
   area.innerHTML = state.students.map(s=>`<article class="student-card">
     <div class="student-card-details">
-      <p class="student-card-label">CARTEIRA DA TURMA</p>
+      <p class="student-card-label">CLASS WALLET</p>
       <h3>${escapeHtml(s.name)}</h3>
-      <p>${escapeHtml(s.class_name||"Sem turma")}</p>
+      <p>${escapeHtml(s.class_name||"No classroom")}</p>
       <div class="card-code">${escapeHtml(s.code)}</div>
     </div>
     <figure class="student-card-qr">
-      <img src="/api/students/${s.id}/card-qr/" alt="QR Code de ${escapeHtml(s.name)}">
-      <figcaption>Escaneie para adicionar ou cobrar</figcaption>
+      <img src="/api/students/${s.id}/card-qr/" alt="${escapeHtml(s.name)} QR code">
+      <figcaption>Scan to add or spend coins</figcaption>
     </figure>
   </article>`).join("");
   document.body.appendChild(area);
@@ -573,7 +573,7 @@ $("#printCardsButton").onclick=async()=>{
     await new Promise(resolve=>requestAnimationFrame(resolve));
     window.print();
   }catch(e){
-    toast("Não foi possível carregar os QR Codes para impressão.");
+    toast("Could not load the QR codes for printing.");
   }finally{
     document.body.classList.remove("printing-cards");
     area.remove();

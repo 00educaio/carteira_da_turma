@@ -8,17 +8,22 @@ from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
 
 
 DEFAULT_CLASSROOM_ACTIONS = (
-    ("good-behavior", "Bom comportamento", ClassroomAction.CREDIT),
-    ("organized-classroom", "Organizou a sala", ClassroomAction.CREDIT),
-    ("helped-classmate", "Ajudou um colega", ClassroomAction.CREDIT),
-    ("finished-activity", "Terminou a atividade", ClassroomAction.CREDIT),
-    ("handwriting-practice", "Fazer caligrafia", ClassroomAction.CREDIT),
-    ("bathroom", "Ir ao banheiro", ClassroomAction.DEBIT),
-    ("drink-water", "Beber água", ClassroomAction.DEBIT),
-    ("sheet-of-paper", "Folha de papel", ClassroomAction.DEBIT),
-    ("indiscipline", "Indisciplina", ClassroomAction.DEBIT),
-    ("lost-card-replacement", "Reposição de cartão perdido", ClassroomAction.DEBIT),
+    ("good-behavior", "Good Behavior", ClassroomAction.CREDIT),
+    ("organized-classroom", "Organized the Classroom", ClassroomAction.CREDIT),
+    ("helped-classmate", "Helped a Classmate", ClassroomAction.CREDIT),
+    ("finished-activity", "Finished an Activity", ClassroomAction.CREDIT),
+    ("handwriting-practice", "Handwriting Practice", ClassroomAction.CREDIT),
+    ("bathroom", "Use the Bathroom", ClassroomAction.DEBIT),
+    ("drink-water", "Drink Water", ClassroomAction.DEBIT),
+    ("sheet-of-paper", "Sheet of Paper", ClassroomAction.DEBIT),
+    ("indiscipline", "Misbehavior", ClassroomAction.DEBIT),
+    ("lost-card-replacement", "Lost Card Replacement", ClassroomAction.DEBIT),
+    ("play-video-game", "Play Video Game", ClassroomAction.DEBIT),
 )
+
+WEEKLY_COINS = 15
+WEEKLY_COINS_HOUR = 7
+WEEKLY_COINS_SETTING = "last_weekly_coins_week"
 
 
 @transaction.atomic
@@ -44,12 +49,6 @@ def ensure_classroom_actions(classroom):
     return classroom.actions.all()
 
 
-def current_week_key():
-    today = timezone.localdate()
-    iso_year, iso_week, _ = today.isocalendar()
-    return f"{iso_year}-W{iso_week:02d}"
-
-
 def analytics_period(period, start=None, end=None):
     today = timezone.localdate()
     if period == "week":
@@ -67,16 +66,16 @@ def analytics_period(period, start=None, end=None):
         return None, None
     elif period == "custom":
         if not start or not end:
-            raise ValueError("Informe as datas inicial e final do intervalo.")
+            raise ValueError("Enter the start and end dates.")
         try:
             start_date = date.fromisoformat(start)
             end_date = date.fromisoformat(end)
         except (TypeError, ValueError):
-            raise ValueError("Informe datas válidas no formato AAAA-MM-DD.") from None
+            raise ValueError("Enter valid dates in YYYY-MM-DD format.") from None
         if start_date > end_date:
-            raise ValueError("A data inicial não pode ser posterior à data final.")
+            raise ValueError("The start date cannot be after the end date.")
     else:
-        raise ValueError("Período de análise inválido.")
+        raise ValueError("Invalid analytics period.")
     return start_date, end_date
 
 
@@ -100,9 +99,9 @@ def build_analytics(owner, period="week", start=None, end=None, classroom_id=Non
         try:
             classroom_id = int(classroom_id)
         except (TypeError, ValueError):
-            raise ValueError("Turma informada é inválida.") from None
+            raise ValueError("The selected classroom is invalid.") from None
         if classroom_id <= 0:
-            raise ValueError("Turma informada é inválida.")
+            raise ValueError("The selected classroom is invalid.")
         classroom = classrooms_query.get(pk=classroom_id)
         classrooms_query = classrooms_query.filter(pk=classroom.pk)
     else:
@@ -211,33 +210,52 @@ def build_analytics(owner, period="week", start=None, end=None, classroom_id=Non
     }
 
 
+def weekly_coins_week_key(now=None):
+    """Return the latest weekly allowance window that began Monday at 7:00."""
+    local_now = timezone.localtime(now) if now is not None else timezone.localtime()
+    monday = local_now.date() - timedelta(days=local_now.weekday())
+    cutoff = timezone.make_aware(
+        datetime.combine(monday, time(hour=WEEKLY_COINS_HOUR)),
+        timezone.get_current_timezone(),
+    )
+    if local_now < cutoff:
+        monday -= timedelta(days=7)
+    iso_year, iso_week, _ = monday.isocalendar()
+    return f"{iso_year}-W{iso_week:02d}"
+
+
 @transaction.atomic
-def ensure_weekly_reset(owner):
-    week_key = current_week_key()
-    setting, _ = AppSetting.objects.select_for_update().get_or_create(
-        owner=owner, key="last_reset_week", defaults={"value": week_key}
+def ensure_weekly_coins(owner, *, award_if_uninitialized=False, now=None):
+    """Credit active students once per weekly window, safely and idempotently."""
+    week_key = weekly_coins_week_key(now)
+    setting, created = AppSetting.objects.select_for_update().get_or_create(
+        owner=owner,
+        key=WEEKLY_COINS_SETTING,
+        defaults={"value": "" if award_if_uninitialized else week_key},
     )
     if setting.value == week_key:
-        return False
+        return 0
+    if created and not award_if_uninitialized:
+        return 0
 
     students = list(
-        Student.objects.select_for_update()
-        .filter(classroom__owner=owner, classroom__active=True, active=True)
-        .exclude(balance=0)
+        Student.objects.select_for_update().filter(
+            classroom__owner=owner, classroom__active=True, active=True
+        )
     )
     movements = []
     for student in students:
         before = student.balance
-        student.balance = 0
+        student.balance = before + WEEKLY_COINS
         movements.append(
             Movement(
                 student=student,
-                movement_type=Movement.RESET,
-                amount=abs(before),
-                signed_amount=-before,
-                reason="Reset semanal automático",
+                movement_type=Movement.CREDIT,
+                amount=WEEKLY_COINS,
+                signed_amount=WEEKLY_COINS,
+                reason="Weekly allowance",
                 balance_before=before,
-                balance_after=0,
+                balance_after=student.balance,
             )
         )
 
@@ -247,7 +265,7 @@ def ensure_weekly_reset(owner):
 
     setting.value = week_key
     setting.save(update_fields=["value"])
-    return True
+    return len(students)
 
 
 @transaction.atomic
@@ -259,16 +277,16 @@ def apply_movement(owner, student_id, action_id):
         isinstance(action_id, int)
         or (isinstance(action_id, str) and action_id.strip().isdigit())
     ):
-        raise ValueError("Selecione uma ação válida.")
+        raise ValueError("Select a valid action.")
     action_id = int(action_id)
     if action_id <= 0:
-        raise ValueError("Selecione uma ação válida.")
+        raise ValueError("Select a valid action.")
     try:
         action = ClassroomAction.objects.select_for_update().get(pk=action_id)
     except ClassroomAction.DoesNotExist:
-        raise ValueError("Selecione uma ação válida.") from None
+        raise ValueError("Select a valid action.") from None
     if action.classroom_id != student.classroom_id or not action.active:
-        raise ValueError("Esta ação não está disponível para este aluno.")
+        raise ValueError("This action is not available for this student.")
 
     amount = action.value
     if action.nature == ClassroomAction.CREDIT:
@@ -276,7 +294,7 @@ def apply_movement(owner, student_id, action_id):
     elif action.nature == ClassroomAction.DEBIT:
         signed_amount = -amount
     else:
-        raise ValueError("A natureza desta ação é inválida.")
+        raise ValueError("This action has an invalid type.")
 
     before = student.balance
     after = before + signed_amount
@@ -308,9 +326,9 @@ def undo_movement(owner, movement_id):
         )
     )
     if movement.reversed:
-        raise ValueError("Esta movimentação já foi desfeita.")
+        raise ValueError("This transaction has already been undone.")
     if movement.movement_type in {Movement.RESET, Movement.REVERSAL}:
-        raise ValueError("Esta movimentação não pode ser desfeita.")
+        raise ValueError("This transaction cannot be undone.")
 
     student = Student.objects.select_for_update().get(pk=movement.student_id)
     reversal = -movement.signed_amount
@@ -327,7 +345,7 @@ def undo_movement(owner, movement_id):
         movement_type=Movement.REVERSAL,
         amount=abs(reversal),
         signed_amount=reversal,
-        reason=f"Estorno: {movement.reason}",
+        reason=f"Reversal: {movement.reason}",
         balance_before=before,
         balance_after=after,
     )

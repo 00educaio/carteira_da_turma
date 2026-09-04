@@ -21,7 +21,7 @@ class Classroom(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name or 'Sem turma'} — {self.owner}"
+        return f"{self.name or 'No classroom'} — {self.owner}"
 
 
 class Student(models.Model):
@@ -47,8 +47,8 @@ class ClassroomAction(models.Model):
     CREDIT = "credit"
     DEBIT = "debit"
     NATURES = [
-        (CREDIT, "Recompensa"),
-        (DEBIT, "Despesa"),
+        (CREDIT, "Reward"),
+        (DEBIT, "Expense"),
     ]
 
     classroom = models.ForeignKey(
@@ -84,10 +84,10 @@ class Movement(models.Model):
     RESET = "reset"
     REVERSAL = "reversal"
     TYPES = [
-        (CREDIT, "Crédito"),
-        (DEBIT, "Débito"),
+        (CREDIT, "Credit"),
+        (DEBIT, "Debit"),
         (RESET, "Reset"),
-        (REVERSAL, "Estorno"),
+        (REVERSAL, "Reversal"),
     ]
 
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="movements")

@@ -1,30 +1,30 @@
 {% load static %}
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0f172a">
-  <title>Carteira da Turma</title>
-  <link rel="stylesheet" href="{% static 'wallet/css/app.css' %}?v=11">
+  <title>Class Wallet</title>
+  <link rel="stylesheet" href="{% static 'wallet/css/app.css' %}?v=12">
   <link rel="stylesheet" href="{% static 'wallet/css/class-filter.css' %}?v=10">
 </head>
 <body data-owner-id="{{ request.user.pk }}" data-initial-student-id="{{ initial_student_id }}">
   <header class="topbar">
     <div>
-      <p class="eyebrow">GESTÃO DE SALA</p>
-      <h1>Carteira da Turma</h1>
-      <p class="subtitle">Créditos, gastos e recompensas dos alunos.</p>
+      <p class="eyebrow">CLASSROOM MANAGEMENT</p>
+      <h1>Class Wallet</h1>
+      <p class="subtitle">Student coins, expenses, and rewards.</p>
     </div>
     <div class="header-actions">
-      <span class="user-label">Olá, {{ request.user.username }}</span>
-      <button class="button ghost" id="printCardsButton">Imprimir cartões</button>
-      <a class="button ghost" href="/api/backup/" id="downloadBackup">Baixar backup</a>
-      <label class="button ghost file-button">Restaurar backup<input id="restoreInput" type="file" accept="application/json"></label>
-      <button class="button danger" id="resetButton">Resetar saldos</button>
+      <span class="user-label">Hello, {{ request.user.username }}</span>
+      <button class="button ghost" id="printCardsButton">Print cards</button>
+      <a class="button ghost" href="/api/backup/" id="downloadBackup">Download backup</a>
+      <label class="button ghost file-button">Restore backup<input id="restoreInput" type="file" accept="application/json"></label>
+      <button class="button danger" id="resetButton">Reset balances</button>
       <form method="post" action="{% url 'logout' %}" class="logout-form">
         {% csrf_token %}
-        <button class="button ghost" type="submit">Sair</button>
+        <button class="button ghost" type="submit">Sign out</button>
       </form>
     </div>
   </header>
@@ -32,33 +32,33 @@
   <main class="layout">
     <section class="panel class-panel full-width">
       <div>
-        <p class="eyebrow">TURMA ATUAL</p>
-        <h2>Administrar turma</h2>
+        <p class="eyebrow">CURRENT CLASSROOM</p>
+        <h2>Manage classroom</h2>
       </div>
       <div class="class-controls">
         <label class="class-selector">
-          <span>Selecione a turma</span>
-          <select id="classFilter"><option value="__all__">Todas as turmas</option></select>
+          <span>Select a classroom</span>
+          <select id="classFilter"><option value="__all__">All classrooms</option></select>
         </label>
-        <button class="button ghost" id="toggleClassManager">Gerenciar turmas</button>
+        <button class="button ghost" id="toggleClassManager">Manage classrooms</button>
       </div>
     </section>
 
     <section class="panel full-width hidden" id="classManager">
       <div class="panel-title-row">
         <div>
-          <p class="eyebrow">ORGANIZAÇÃO</p>
-          <h2>Gerenciar turmas</h2>
+          <p class="eyebrow">ORGANIZATION</p>
+          <h2>Manage classrooms</h2>
         </div>
         <div class="inline-form">
-          <input id="newClassName" placeholder="Nome da nova turma">
-          <button class="button primary" id="createClassButton">Criar turma</button>
+          <input id="newClassName" placeholder="New classroom name">
+          <button class="button primary" id="createClassButton">Create classroom</button>
         </div>
       </div>
-      <p class="help">Turmas arquivadas preservam alunos e histórico, mas deixam de aparecer na operação diária.</p>
+      <p class="help">Archived classrooms keep their students and history but are hidden from daily operations.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Turma</th><th>Status</th><th>Alunos</th><th>Transferir para</th><th>Ações</th></tr></thead>
+          <thead><tr><th>Classroom</th><th>Status</th><th>Students</th><th>Transfer to</th><th>Actions</th></tr></thead>
           <tbody id="classroomsTable"></tbody>
         </table>
       </div>
@@ -67,33 +67,33 @@
     <section class="panel full-width hidden" id="actionsConfigPanel">
       <div class="panel-title-row">
         <div>
-          <p class="eyebrow">VALORES POR TURMA</p>
-          <h2 id="actionsConfigTitle">Configurar ações</h2>
-          <p class="help">As alterações serão usadas apenas nas próximas movimentações.</p>
+          <p class="eyebrow">VALUES BY CLASSROOM</p>
+          <h2 id="actionsConfigTitle">Configure actions</h2>
+          <p class="help">Changes apply only to future transactions.</p>
         </div>
-        <button class="button ghost" id="closeActionsConfig" type="button">Fechar</button>
+        <button class="button ghost" id="closeActionsConfig" type="button">Close</button>
       </div>
       <div id="actionsConfigContent" class="actions-config-groups"></div>
-      <button class="button primary actions-config-save" id="saveActionsConfig" type="button">Salvar configuração</button>
+      <button class="button primary actions-config-save" id="saveActionsConfig" type="button">Save settings</button>
     </section>
 
     <section class="panel search-panel">
       <div class="panel-title-row">
         <div>
-          <p class="eyebrow">OPERAÇÃO RÁPIDA</p>
-          <h2>Buscar aluno</h2>
+          <p class="eyebrow">QUICK TRANSACTION</p>
+          <h2>Find a student</h2>
         </div>
-        <span class="status" id="serverStatus">Conectando…</span>
+        <span class="status" id="serverStatus">Connecting…</span>
       </div>
-      <input id="searchInput" class="large-input" autocomplete="off" placeholder="Digite o código, nome ou turma">
+      <input id="searchInput" class="large-input" autocomplete="off" placeholder="Enter a code, name, or classroom">
       <div id="selectedStudent" class="selected-student hidden"></div>
       <div id="movementBox" class="movement-box hidden">
         <div class="segmented">
-          <button class="segment active" data-type="credit">Adicionar</button>
-          <button class="segment" data-type="debit">Retirar</button>
+          <button class="segment active" data-type="credit">Add</button>
+          <button class="segment" data-type="debit">Spend</button>
         </div>
         <div id="movementActions" class="movement-actions" aria-live="polite"></div>
-        <button class="button primary full" id="confirmMovement">Confirmar movimentação</button>
+        <button class="button primary full" id="confirmMovement">Confirm transaction</button>
       </div>
       <div id="searchResults" class="student-list"></div>
     </section>
@@ -101,30 +101,30 @@
     <section class="panel">
       <div class="panel-title-row">
         <div>
-          <p class="eyebrow">ALUNOS</p>
-          <h2 id="studentsTitle">Alunos cadastrados</h2>
+          <p class="eyebrow">STUDENTS</p>
+          <h2 id="studentsTitle">Registered students</h2>
         </div>
-        <button class="button primary" id="toggleStudentForm">Cadastrar aluno</button>
+        <button class="button primary" id="toggleStudentForm">Add student</button>
       </div>
 
       <div id="studentForm" class="drawer hidden">
         <div class="form-grid three">
-          <label>Nome<input id="studentName" placeholder="Nome do aluno"></label>
-          <label>Turma<input id="studentClass" placeholder="Ex.: 6º A"></label>
-          <label>Código<input id="studentCode" placeholder="Em branco gera automático"></label>
+          <label>Name<input id="studentName" placeholder="Student name"></label>
+          <label>Classroom<input id="studentClass" placeholder="E.g., Grade 6A"></label>
+          <label>Code<input id="studentCode" placeholder="Leave blank to generate automatically"></label>
         </div>
-        <button class="button primary" id="saveStudent">Salvar aluno</button>
+        <button class="button primary" id="saveStudent">Save student</button>
         <details>
-          <summary>Cadastrar lista</summary>
-          <p class="help">Uma linha por aluno: Nome; Turma; Código</p>
-          <textarea id="bulkStudents" rows="6" placeholder="Ana Silva; 6º A; 1024&#10;Bruno Lima; 6º A"></textarea>
-          <button class="button secondary" id="saveBulk">Cadastrar lista</button>
+          <summary>Add a list</summary>
+          <p class="help">One student per line: Name; Classroom; Code</p>
+          <textarea id="bulkStudents" rows="6" placeholder="Ana Silva; Grade 6A; 1024&#10;Bruno Lima; Grade 6A"></textarea>
+          <button class="button secondary" id="saveBulk">Add list</button>
         </details>
       </div>
 
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Aluno</th><th>Turma</th><th>Código</th><th>Saldo</th><th></th></tr></thead>
+          <thead><tr><th>Student</th><th>Classroom</th><th>Code</th><th>Balance</th><th></th></tr></thead>
           <tbody id="studentsTable"></tbody>
         </table>
       </div>
@@ -133,14 +133,14 @@
     <section class="panel full-width">
       <div class="panel-title-row">
         <div>
-          <p class="eyebrow">HISTÓRICO</p>
-          <h2>Últimas movimentações</h2>
+          <p class="eyebrow">HISTORY</p>
+          <h2>Latest transactions</h2>
         </div>
-        <button class="button ghost" id="refreshButton">Atualizar</button>
+        <button class="button ghost" id="refreshButton">Refresh</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Data</th><th>Aluno</th><th>Motivo</th><th>Valor</th><th>Saldo</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Student</th><th>Reason</th><th>Amount</th><th>Balance</th><th></th></tr></thead>
           <tbody id="movementsTable"></tbody>
         </table>
       </div>
@@ -149,53 +149,53 @@
     <section class="panel full-width" id="analyticsPanel">
       <div class="panel-title-row">
         <div>
-          <p class="eyebrow">VISÃO GERAL</p>
-          <h2>Análise financeira</h2>
-          <p class="help">Ganhos e gastos não incluem resets, estornos ou movimentações desfeitas.</p>
+          <p class="eyebrow">OVERVIEW</p>
+          <h2>Coin analytics</h2>
+          <p class="help">Earnings and spending exclude resets, reversals, and undone transactions.</p>
         </div>
-        <span class="status" id="analyticsStatus">Carregando…</span>
+        <span class="status" id="analyticsStatus">Loading…</span>
       </div>
       <div class="analytics-filters">
-        <label>Período
+        <label>Period
           <select id="analyticsPeriod">
-            <option value="week">Semana atual</option>
-            <option value="month">Mês atual</option>
-            <option value="all">Todo o histórico</option>
-            <option value="custom">Intervalo personalizado</option>
+            <option value="week">Current week</option>
+            <option value="month">Current month</option>
+            <option value="all">All history</option>
+            <option value="custom">Custom range</option>
           </select>
         </label>
-        <label>Turma
-          <select id="analyticsClassroom"><option value="">Todas as turmas</option></select>
+        <label>Classroom
+          <select id="analyticsClassroom"><option value="">All classrooms</option></select>
         </label>
         <div class="analytics-custom-dates hidden" id="analyticsCustomDates">
-          <label>Data inicial<input id="analyticsStart" type="date"></label>
-          <label>Data final<input id="analyticsEnd" type="date"></label>
+          <label>Start date<input id="analyticsStart" type="date"></label>
+          <label>End date<input id="analyticsEnd" type="date"></label>
         </div>
-        <button class="button primary" id="applyAnalyticsFilters" type="button">Atualizar análise</button>
+        <button class="button primary" id="applyAnalyticsFilters" type="button">Update analytics</button>
       </div>
       <div id="analyticsError" class="config-error hidden"></div>
       <div id="analyticsCards" class="analytics-cards"></div>
-      <p id="analyticsEmpty" class="analytics-empty hidden">Nenhuma movimentação de ganho ou gasto neste período.</p>
+      <p id="analyticsEmpty" class="analytics-empty hidden">No earnings or spending in this period.</p>
 
       <div class="analytics-tables">
         <section>
-          <h3>Totais por turma</h3>
+          <h3>Totals by classroom</h3>
           <div class="table-wrap"><table>
-            <thead><tr><th>Turma</th><th>Total ganho</th><th>Total gasto</th></tr></thead>
+            <thead><tr><th>Classroom</th><th>Total earned</th><th>Total spent</th></tr></thead>
             <tbody id="analyticsClassroomsTable"></tbody>
           </table></div>
         </section>
         <section>
-          <h3>Totais por aluno</h3>
+          <h3>Totals by student</h3>
           <div class="table-wrap"><table>
-            <thead><tr><th>Aluno</th><th>Turma</th><th>Status</th><th>Total ganho</th><th>Total gasto</th></tr></thead>
+            <thead><tr><th>Student</th><th>Classroom</th><th>Status</th><th>Total earned</th><th>Total spent</th></tr></thead>
             <tbody id="analyticsStudentsTable"></tbody>
           </table></div>
         </section>
         <section>
-          <h3>Alunos no vermelho</h3>
+          <h3>Students with negative balances</h3>
           <div class="table-wrap"><table>
-            <thead><tr><th>Aluno</th><th>Turma</th><th>Saldo atual</th></tr></thead>
+            <thead><tr><th>Student</th><th>Classroom</th><th>Current balance</th></tr></thead>
             <tbody id="analyticsNegativeTable"></tbody>
           </table></div>
         </section>
@@ -204,6 +204,6 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="{% static 'wallet/js/app.js' %}?v=11"></script>
+  <script src="{% static 'wallet/js/app.js' %}?v=12"></script>
 </body>
 </html>

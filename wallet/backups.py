@@ -18,17 +18,17 @@ def _logical_id(value, label):
         or not isinstance(value, (str, int))
         or not str(value).strip()
     ):
-        raise ValueError(f"{label} possui identificador inválido.")
+        raise ValueError(f"{label} has an invalid identifier.")
     return str(value)
 
 
 def _integer(value, label, *, minimum=None, maximum=None):
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{label} deve ser um número inteiro.")
+        raise ValueError(f"{label} must be an integer.")
     if minimum is not None and value < minimum:
-        raise ValueError(f"{label} deve ser maior ou igual a {minimum}.")
+        raise ValueError(f"{label} must be greater than or equal to {minimum}.")
     if maximum is not None and value > maximum:
-        raise ValueError(f"{label} deve ser menor ou igual a {maximum}.")
+        raise ValueError(f"{label} must be less than or equal to {maximum}.")
     return value
 
 
@@ -36,7 +36,7 @@ def _boolean(value, label, *, default=None):
     if value is None and default is not None:
         return default
     if not isinstance(value, bool):
-        raise ValueError(f"{label} deve ser verdadeiro ou falso.")
+        raise ValueError(f"{label} must be true or false.")
     return value
 
 
@@ -44,23 +44,23 @@ def _text(value, label, max_length, *, allow_blank=False, default=None):
     if value is None and default is not None:
         value = default
     if not isinstance(value, str):
-        raise ValueError(f"{label} deve ser um texto.")
+        raise ValueError(f"{label} must be text.")
     value = value.strip()
     if not allow_blank and not value:
-        raise ValueError(f"{label} não pode ficar vazio.")
+        raise ValueError(f"{label} cannot be blank.")
     if len(value) > max_length:
-        raise ValueError(f"{label} pode ter no máximo {max_length} caracteres.")
+        raise ValueError(f"{label} can be at most {max_length} characters long.")
     return value
 
 
 def _items(data, key, *, required=False):
     if required and key not in data:
-        raise ValueError(f"O backup não contém a seção '{key}'.")
+        raise ValueError(f"The backup does not contain the '{key}' section.")
     value = data.get(key, [])
     if not isinstance(value, list):
-        raise ValueError(f"A seção '{key}' deve ser uma lista.")
+        raise ValueError(f"The '{key}' section must be a list.")
     if any(not isinstance(item, dict) for item in value):
-        raise ValueError(f"Todos os itens da seção '{key}' devem ser objetos.")
+        raise ValueError(f"Every item in the '{key}' section must be an object.")
     return value
 
 
@@ -68,11 +68,11 @@ def _created_at(value):
     if value in (None, ""):
         return None
     if not isinstance(value, str):
-        raise ValueError("A data de uma movimentação deve estar no formato ISO.")
+        raise ValueError("A transaction date must use ISO format.")
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
-        raise ValueError("A data de uma movimentação deve estar no formato ISO.") from None
+        raise ValueError("A transaction date must use ISO format.") from None
     if timezone.is_naive(parsed):
         parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
     return parsed
@@ -149,10 +149,10 @@ def build_backup(owner):
 
 def validate_backup(data, owner):
     if not isinstance(data, dict):
-        raise ValueError("O conteúdo do backup deve ser um objeto JSON.")
+        raise ValueError("The backup contents must be a JSON object.")
     version = data.get("version", 2)
     if isinstance(version, bool) or not isinstance(version, int) or version not in (2, 3):
-        raise ValueError("Versão de backup não suportada. Use um arquivo v2 ou v3.")
+        raise ValueError("Unsupported backup version. Use a v2 or v3 file.")
 
     classrooms_data = _items(data, "classrooms", required=version == 3)
     actions_data = _items(data, "actions", required=version == 3)
@@ -160,24 +160,24 @@ def validate_backup(data, owner):
     movements_data = _items(data, "movements", required=True)
     settings_data = data.get("settings", {})
     if not isinstance(settings_data, dict):
-        raise ValueError("A seção 'settings' deve ser um objeto.")
+        raise ValueError("The 'settings' section must be an object.")
 
     classrooms = []
     classroom_keys = set()
     classroom_names = set()
     for index, item in enumerate(classrooms_data, start=1):
         name = _text(
-            item.get("name"), f"Nome da turma {index}", 60, allow_blank=True, default=""
+            item.get("name"), f"Classroom name {index}", 60, allow_blank=True, default=""
         )
         if name in classroom_names:
-            raise ValueError(f"A turma '{name or 'Sem turma'}' está duplicada no backup.")
+            raise ValueError(f"Classroom '{name or 'No classroom'}' is duplicated in the backup.")
         key = (
-            _logical_id(item.get("id"), f"Turma {index}")
+            _logical_id(item.get("id"), f"Classroom {index}")
             if version == 3
             else name
         )
         if key in classroom_keys:
-            raise ValueError("Há identificadores de turma duplicados no backup.")
+            raise ValueError("The backup contains duplicate classroom identifiers.")
         classroom_names.add(name)
         classroom_keys.add(key)
         classrooms.append(
@@ -185,7 +185,7 @@ def validate_backup(data, owner):
                 "key": key,
                 "name": name,
                 "active": _boolean(
-                    item.get("active"), f"Status da turma {name or index}", default=True
+                    item.get("active"), f"Classroom status {name or index}", default=True
                 ),
             }
         )
@@ -195,45 +195,45 @@ def validate_backup(data, owner):
     action_default_keys = set()
     if version == 3:
         for index, item in enumerate(actions_data, start=1):
-            key = _logical_id(item.get("id"), f"Ação {index}")
+            key = _logical_id(item.get("id"), f"Action {index}")
             classroom_key = _logical_id(
-                item.get("classroom_id"), f"Turma da ação {index}"
+                item.get("classroom_id"), f"Classroom for action {index}"
             )
             if key in action_keys:
-                raise ValueError("Há identificadores de ação duplicados no backup.")
+                raise ValueError("The backup contains duplicate action identifiers.")
             if classroom_key not in classroom_keys:
-                raise ValueError(f"A ação {index} referencia uma turma inexistente.")
+                raise ValueError(f"Action {index} references a classroom that does not exist.")
             default_key = _text(
-                item.get("default_key"), f"Identificador estável da ação {index}", 80
+                item.get("default_key"), f"Stable identifier for action {index}", 80
             )
             unique_default = (classroom_key, default_key)
             if unique_default in action_default_keys:
-                raise ValueError("Há ações com identificador estável duplicado na mesma turma.")
+                raise ValueError("Actions in the same classroom have duplicate stable identifiers.")
             nature = item.get("nature")
             if nature not in {ClassroomAction.CREDIT, ClassroomAction.DEBIT}:
-                raise ValueError(f"A ação {index} possui natureza inválida.")
+                raise ValueError(f"Action {index} has an invalid type.")
             action_keys.add(key)
             action_default_keys.add(unique_default)
             actions.append(
                 {
                     "key": key,
                     "classroom_key": classroom_key,
-                    "name": _text(item.get("name"), f"Nome da ação {index}", 120),
+                    "name": _text(item.get("name"), f"Action name {index}", 120),
                     "nature": nature,
                     "value": _integer(
                         item.get("value"),
-                        f"Valor da ação {index}",
+                        f"Value for action {index}",
                         minimum=1,
                         maximum=INTEGER_MAX,
                     ),
                     "position": _integer(
                         item.get("position", 0),
-                        f"Posição da ação {index}",
+                        f"Position for action {index}",
                         minimum=0,
                         maximum=32767,
                     ),
                     "active": _boolean(
-                        item.get("active"), f"Status da ação {index}", default=True
+                        item.get("active"), f"Status for action {index}", default=True
                     ),
                     "default_key": default_key,
                 }
@@ -243,19 +243,19 @@ def validate_backup(data, owner):
     student_keys = set()
     student_codes = set()
     for index, item in enumerate(students_data, start=1):
-        key = _logical_id(item.get("id"), f"Aluno {index}")
+        key = _logical_id(item.get("id"), f"Student {index}")
         if key in student_keys:
-            raise ValueError("Há identificadores de aluno duplicados no backup.")
+            raise ValueError("The backup contains duplicate student identifiers.")
         if version == 3:
             classroom_key = _logical_id(
-                item.get("classroom_id"), f"Turma do aluno {index}"
+                item.get("classroom_id"), f"Classroom for student {index}"
             )
             if classroom_key not in classroom_keys:
-                raise ValueError(f"O aluno {index} referencia uma turma inexistente.")
+                raise ValueError(f"Student {index} references a classroom that does not exist.")
         else:
             classroom_key = _text(
                 item.get("class_name"),
-                f"Turma do aluno {index}",
+                f"Classroom for student {index}",
                 60,
                 allow_blank=True,
                 default="",
@@ -266,25 +266,25 @@ def validate_backup(data, owner):
                 classrooms.append(
                     {"key": classroom_key, "name": classroom_key, "active": True}
                 )
-        code = _text(item.get("code"), f"Código do aluno {index}", 30)
+        code = _text(item.get("code"), f"Student code {index}", 30)
         if code in student_codes:
-            raise ValueError(f"O código de aluno '{code}' está duplicado no backup.")
+            raise ValueError(f"Student code '{code}' is duplicated in the backup.")
         student_keys.add(key)
         student_codes.add(code)
         students.append(
             {
                 "key": key,
                 "classroom_key": classroom_key,
-                "name": _text(item.get("name"), f"Nome do aluno {index}", 120),
+                "name": _text(item.get("name"), f"Student name {index}", 120),
                 "code": code,
                 "balance": _integer(
                     item.get("balance", 0),
-                    f"Saldo do aluno {index}",
+                    f"Balance for student {index}",
                     minimum=INTEGER_MIN,
                     maximum=INTEGER_MAX,
                 ),
                 "active": _boolean(
-                    item.get("active"), f"Status do aluno {index}", default=True
+                    item.get("active"), f"Status for student {index}", default=True
                 ),
             }
         )
@@ -296,7 +296,7 @@ def validate_backup(data, owner):
     )
     if conflicting_codes:
         code = sorted(conflicting_codes)[0]
-        raise ValueError(f"O código de aluno '{code}' já pertence a outro usuário.")
+        raise ValueError(f"Student code '{code}' already belongs to another user.")
 
     action_classrooms = {item["key"]: item["classroom_key"] for item in actions}
     student_classrooms = {item["key"]: item["classroom_key"] for item in students}
@@ -305,27 +305,27 @@ def validate_backup(data, owner):
     valid_movement_types = {choice[0] for choice in Movement.TYPES}
     for index, item in enumerate(movements_data, start=1):
         raw_key = item.get("id", f"movement-{index}")
-        key = _logical_id(raw_key, f"Movimentação {index}")
+        key = _logical_id(raw_key, f"Transaction {index}")
         if key in movement_keys:
-            raise ValueError("Há identificadores de movimentação duplicados no backup.")
+            raise ValueError("The backup contains duplicate transaction identifiers.")
         student_key = _logical_id(
-            item.get("student_id"), f"Aluno da movimentação {index}"
+            item.get("student_id"), f"Student for transaction {index}"
         )
         if student_key not in student_keys:
-            raise ValueError(f"A movimentação {index} referencia um aluno inexistente.")
+            raise ValueError(f"Transaction {index} references a student that does not exist.")
         movement_type = item.get("movement_type", Movement.CREDIT)
         if movement_type not in valid_movement_types:
-            raise ValueError(f"A movimentação {index} possui tipo inválido.")
+            raise ValueError(f"Transaction {index} has an invalid type.")
         action_key = None
         if version == 3 and item.get("action_id") is not None:
             action_key = _logical_id(
-                item.get("action_id"), f"Ação da movimentação {index}"
+                item.get("action_id"), f"Action for transaction {index}"
             )
             if action_key not in action_keys:
-                raise ValueError(f"A movimentação {index} referencia uma ação inexistente.")
+                raise ValueError(f"Transaction {index} references an action that does not exist.")
             if action_classrooms[action_key] != student_classrooms[student_key]:
                 raise ValueError(
-                    f"A ação da movimentação {index} pertence a outra turma."
+                    f"The action for transaction {index} belongs to another classroom."
                 )
         movement_keys.add(key)
         movements.append(
@@ -335,37 +335,37 @@ def validate_backup(data, owner):
                 "movement_type": movement_type,
                 "amount": _integer(
                     item.get("amount", 0),
-                    f"Valor da movimentação {index}",
+                    f"Value for transaction {index}",
                     minimum=0,
                     maximum=INTEGER_MAX,
                 ),
                 "signed_amount": _integer(
                     item.get("signed_amount", 0),
-                    f"Valor assinado da movimentação {index}",
+                    f"Signed value for transaction {index}",
                     minimum=INTEGER_MIN,
                     maximum=INTEGER_MAX,
                 ),
                 "reason": _text(
                     item.get("reason"),
-                    f"Motivo da movimentação {index}",
+                    f"Reason for transaction {index}",
                     160,
-                    default="Movimentação restaurada",
+                    default="Restored transaction",
                 ),
                 "balance_before": _integer(
                     item.get("balance_before", 0),
-                    f"Saldo anterior da movimentação {index}",
+                    f"Previous balance for transaction {index}",
                     minimum=INTEGER_MIN,
                     maximum=INTEGER_MAX,
                 ),
                 "balance_after": _integer(
                     item.get("balance_after", 0),
-                    f"Saldo posterior da movimentação {index}",
+                    f"New balance for transaction {index}",
                     minimum=INTEGER_MIN,
                     maximum=INTEGER_MAX,
                 ),
                 "reversed": _boolean(
                     item.get("reversed"),
-                    f"Status da movimentação {index}",
+                    f"Status for transaction {index}",
                     default=False,
                 ),
                 "created_at": _created_at(item.get("created_at")),
@@ -375,11 +375,11 @@ def validate_backup(data, owner):
     settings = []
     setting_keys = set()
     for key, value in settings_data.items():
-        normalized_key = _text(key, "Chave de configuração", 80)
+        normalized_key = _text(key, "Settings key", 80)
         if normalized_key in setting_keys:
-            raise ValueError("Há chaves de configuração duplicadas no backup.")
+            raise ValueError("The backup contains duplicate settings keys.")
         if not isinstance(value, (str, int, float, bool)) and value is not None:
-            raise ValueError(f"A configuração '{normalized_key}' possui valor inválido.")
+            raise ValueError(f"Setting '{normalized_key}' has an invalid value.")
         setting_keys.add(normalized_key)
         settings.append((normalized_key, str(value if value is not None else "")))
 

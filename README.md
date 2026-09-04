@@ -1,64 +1,68 @@
-# Carteira da Turma — Django + SQLite
+# Class Wallet — Django + SQLite
 
-Aplicação simples para administrar moedas dos alunos, com acesso isolado por superusuário.
+A simple application for managing student coins, with data isolated by superuser.
 
-## Recursos
+## Features
 
-- Cadastro individual e em massa.
-- Administração separada por turma, com alunos, histórico, impressão e reset filtrados.
-- Cada turma pertence a um superusuário; dados, backups, restaurações e resets não se misturam.
-- Criação, renomeação, arquivamento, reativação e transferência de turmas.
-- Código exclusivo para cada cartão.
-- Catálogo de recompensas e despesas configurável separadamente por turma.
-- Movimentações com valores fixos definidos pelo professor, sem valor livre no navegador.
-- Crédito e débito por aluno, incluindo cobrança com saldo negativo.
-- Histórico e estorno.
-- Reset semanal automático na primeira abertura de uma nova semana.
-- Reset manual.
-- Painel de análise financeira por semana, mês, histórico ou intervalo personalizado.
-- Impressão dos cartões com QR Code que abre o aluno diretamente na operação rápida.
-- Backup e restauração transacional em JSON, com compatibilidade v2 e v3.
+- Add students individually or in bulk.
+- Separate classroom management for students, history, printing, and filtered resets.
+- Create, rename, archive, reactivate, and transfer classrooms.
+- Unique code and printable QR card for every student.
+- Configurable rewards and expenses for each classroom.
+- Credits and expenses with fixed values, including negative balances.
+- Transaction history and reversals.
+- Automatic weekly allowance of 15 coins every Monday at 7:00 a.m.
+- Manual balance reset.
+- Coin analytics by week, month, all history, or a custom date range.
+- Transactional JSON backup and restore, compatible with v2 and v3 files.
 
-## Ações e saldos
+## Actions and balances
 
-Cada turma recebe automaticamente um catálogo inicial de recompensas e despesas.
-Em **Gerenciar turmas → Configurar ações**, o professor pode alterar o valor e
-ativar ou desativar cada opção. A mudança vale somente para movimentações futuras;
-o histórico preserva o nome e o valor efetivamente aplicados.
+Every classroom automatically receives the default rewards and expenses, including
+**Play Video Game**. In **Manage classrooms → Configure actions**, the teacher can
+change each value and enable or disable each option. Changes apply only to future
+transactions; history keeps the action name and value that were originally used.
 
-A operação rápida aceita apenas uma ação ativa da turma do aluno. Débitos podem
-deixar o saldo negativo, inclusive a ação **Reposição de cartão perdido**. Saldos
-no vermelho são destacados na interface. Um estorno sempre usa o valor histórico
-da movimentação, mesmo que o preço atual da ação seja diferente.
+Expenses may make a balance negative. A reversal always uses the historical
+transaction value, even when the current action value has changed.
 
-## Análise financeira
+## Weekly coins
 
-A seção **Análise financeira** apresenta totais de ganhos e gastos por turma e
-por aluno, destaques com suporte a empates e a relação de alunos ativos com saldo
-negativo. Os filtros disponíveis são semana atual, mês atual, todo o histórico e
-intervalo personalizado, com opção de limitar a uma turma.
+The command below awards 15 coins to every active student in an active classroom.
+It is idempotent: running it again in the same weekly window will not award coins
+twice. The weekly window starts Monday at 7:00 a.m. in `America/Maceio`.
 
-Resets, estornos e movimentações desfeitas não entram nos totais. Os intervalos
-de data são inclusivos e seguem o fuso `America/Maceio`.
+```bash
+.venv/bin/python manage.py award_weekly_coins
+```
 
-## Backup e restauração
+Schedule it for Monday at 7:00 a.m. on the server. For example, with cron:
 
-O backup atual usa o formato **v3** e inclui turmas, ações e seus valores, status,
-alunos, saldos negativos, histórico, vínculo opcional entre movimentação e ação e
-configurações da conta. Alunos e turmas arquivados também são preservados.
+```cron
+CRON_TZ=America/Maceio
+0 7 * * 1 cd /path/to/carteira-da-turma-django && .venv/bin/python manage.py award_weekly_coins
+```
 
-A restauração valida o arquivo inteiro antes de substituir qualquer dado e executa
-a troca em uma única transação. Se houver erro, os dados atuais permanecem intactos.
-Backups **v2** continuam aceitos: cada turma recebe o catálogo padrão e as
-movimentações antigas são restauradas sem vínculo de ação, preservando motivo e
-valor históricos.
+The web app also checks the allowance window when it is opened. This provides an
+idempotent fallback if one scheduled run is missed.
 
-Além do download manual, o navegador mantém uma cópia automática no `localStorage`,
-se houver espaço disponível. Na primeira abertura, se o servidor estiver sem turmas
-e alunos, essa cópia é enviada à mesma restauração validada automaticamente. A cópia
-é separada por superusuário no navegador.
+## Coin analytics
 
-## Rodar localmente
+The **Coin analytics** section displays earned and spent coin totals by classroom
+and student, leaders (including ties), and active students with negative balances.
+Resets, reversals, and undone transactions are excluded. Date ranges are inclusive
+and follow the `America/Maceio` time zone.
+
+## Backup and restore
+
+The current backup format is **v3** and includes classrooms, configurable actions,
+students, negative balances, transaction history, and account settings. Archived
+students and classrooms are preserved. The restore process validates the entire
+file and replaces data in a single transaction. Older **v2** backups are supported.
+
+The browser also keeps an automatic local backup when local storage is available.
+
+## Run locally
 
 ```bash
 python3 -m venv .venv
@@ -69,19 +73,14 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-Abra `http://127.0.0.1:8000`.
+Open `http://127.0.0.1:8000` and sign in with a superuser account.
 
-O comando `createsuperuser` solicita o usuário e a senha da primeira conta. Use
-essas credenciais na tela de login. A carteira aceita apenas superusuários. Novas
-contas e a transferência de uma turma para outro proprietário podem ser gerenciadas
-em `/admin/`.
+In development, `DEBUG` is enabled by default. In production, set `DEBUG=False`,
+provide a unique `SECRET_KEY`, and configure `ALLOWED_HOSTS` with the real domain.
 
-No desenvolvimento, `DEBUG` fica ativo por padrão. Em produção, defina
-`DEBUG=False`, uma `SECRET_KEY` própria e `ALLOWED_HOSTS` com o domínio real.
+## Deploy on PythonAnywhere
 
-## Deploy no PythonAnywhere
-
-No console Bash do PythonAnywhere, após clonar ou enviar o projeto:
+After cloning or uploading the project, run:
 
 ```bash
 cd ~/carteira-da-turma-django
@@ -92,26 +91,19 @@ python3.13 -m venv .venv
 .venv/bin/python manage.py createsuperuser
 ```
 
-Na aba **Web**:
+Configure the virtual environment, WSGI file, `/static/` mapping, HTTPS, and reload
+the web app. Add `manage.py award_weekly_coins` as a scheduled task for Mondays at
+7:00 a.m. Maceió time (10:00 UTC).
 
-1. Crie um app com configuração manual e escolha a mesma versão de Python da virtualenv.
-2. Informe `/home/SEU_USUARIO/carteira-da-turma-django/.venv` em **Virtualenv**.
-3. Abra o arquivo WSGI indicado pelo painel e adapte o conteúdo de
-   `pythonanywhere_wsgi.py.example`, substituindo `SEU_USUARIO` e a chave secreta.
-4. Em **Static files**, mapeie `/static/` para
-   `/home/SEU_USUARIO/carteira-da-turma-django/staticfiles`.
-5. Ative **Force HTTPS** e clique em **Reload**.
+Before updating an existing installation, download a backup. Then run `migrate`
+and `collectstatic` again. Never commit a real secret key.
 
-O SQLite do PythonAnywhere é persistente. Antes de atualizar uma instalação já em
-uso, baixe um backup pela aplicação e depois execute `migrate` e `collectstatic`
-novamente. Não envie a chave secreta real para o repositório.
-
-## Formato para cadastro em massa
+## Bulk student format
 
 ```text
-Ana Silva; 6º A; 1024
-Bruno Lima; 6º A
-Carla Souza; 6º B; 2098
+Ana Silva; Grade 6A; 1024
+Bruno Lima; Grade 6A
+Carla Souza; Grade 6B; 2098
 ```
 
-O código é gerado automaticamente quando não for informado.
+The code is generated automatically when omitted.

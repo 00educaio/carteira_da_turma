@@ -17,12 +17,12 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .backups import build_backup, restore_backup, validate_backup
-from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
+from .models import Classroom, ClassroomAction, Movement, Student
 from .services import (
     apply_movement,
     build_analytics,
     ensure_classroom_actions,
-    ensure_weekly_reset,
+    ensure_weekly_coins,
     undo_movement,
 )
 
@@ -33,10 +33,10 @@ def api_login_required(view_func):
     @wraps(view_func)
     def wrapped(request, *args, **kwargs):
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Sua sessão expirou. Entre novamente."}, status=401)
+            return JsonResponse({"error": "Your session has expired. Please sign in again."}, status=401)
         if not request.user.is_superuser:
             return JsonResponse(
-                {"error": "A Carteira da Turma exige uma conta de superusuário."}, status=403
+                {"error": "Class Wallet requires a superuser account."}, status=403
             )
         return view_func(request, *args, **kwargs)
 
@@ -47,7 +47,7 @@ def json_body(request):
     try:
         return json.loads(request.body or "{}")
     except json.JSONDecodeError as exc:
-        raise ValueError("JSON inválido.") from exc
+        raise ValueError("Invalid JSON.") from exc
 
 
 def serialize_student(student):
@@ -64,10 +64,10 @@ def serialize_student(student):
 def classroom_for(owner, name, *, allow_inactive=False):
     name = str(name).strip()
     if len(name) > 60:
-        raise ValueError("O nome da turma pode ter no máximo 60 caracteres.")
+        raise ValueError("The classroom name can be at most 60 characters long.")
     classroom, _ = Classroom.objects.get_or_create(owner=owner, name=name)
     if not allow_inactive and not classroom.active:
-        raise ValueError("Esta turma está arquivada. Reative-a antes de cadastrar alunos.")
+        raise ValueError("This classroom is archived. Reactivate it before adding students.")
     ensure_classroom_actions(classroom)
     return classroom
 
@@ -106,15 +106,15 @@ def serialize_classroom_action(action):
 
 def positive_integer(value):
     if isinstance(value, bool):
-        raise ValueError("O valor de cada ação deve ser um número inteiro positivo.")
+        raise ValueError("Each action value must be a positive integer.")
     if isinstance(value, int):
         parsed = value
     elif isinstance(value, str) and value.strip().isdigit():
         parsed = int(value.strip())
     else:
-        raise ValueError("O valor de cada ação deve ser um número inteiro positivo.")
+        raise ValueError("Each action value must be a positive integer.")
     if parsed <= 0:
-        raise ValueError("O valor de cada ação deve ser maior que zero.")
+        raise ValueError("Each action value must be greater than zero.")
     return parsed
 
 
@@ -141,15 +141,15 @@ def generate_code():
         code = str(random.randint(1000, 9999))
         if not Student.objects.filter(code=code).exists():
             return code
-    raise ValueError("Não foi possível gerar um código disponível.")
+    raise ValueError("Could not generate an available code.")
 
 
 @ensure_csrf_cookie
 @login_required
 def index(request):
     if not request.user.is_superuser:
-        return HttpResponse("Acesso permitido apenas para superusuários.", status=403)
-    ensure_weekly_reset(request.user)
+        return HttpResponse("Access is restricted to superusers.", status=403)
+    ensure_weekly_coins(request.user)
     initial_student_id = None
     raw_student_id = request.GET.get("student", "").strip()
     if raw_student_id.isdigit():
@@ -178,15 +178,15 @@ def classrooms_api(request):
             data = json_body(request)
             name = str(data.get("name", "")).strip()
             if not name:
-                raise ValueError("Informe o nome da turma.")
+                raise ValueError("Enter a classroom name.")
             if len(name) > 60:
-                raise ValueError("O nome da turma pode ter no máximo 60 caracteres.")
+                raise ValueError("The classroom name can be at most 60 characters long.")
             with transaction.atomic():
                 classroom = Classroom.objects.create(owner=request.user, name=name)
                 ensure_classroom_actions(classroom)
             return JsonResponse({"classroom": serialize_classroom(classroom)}, status=201)
         except (ValueError, IntegrityError) as exc:
-            message = "Você já possui uma turma com esse nome." if isinstance(exc, IntegrityError) else str(exc)
+            message = "You already have a classroom with this name." if isinstance(exc, IntegrityError) else str(exc)
             return JsonResponse({"error": message}, status=400)
 
     classrooms = (
@@ -217,7 +217,7 @@ def classroom_actions_api(request, classroom_id):
             pk=classroom_id, owner=request.user, active=True
         )
     except Classroom.DoesNotExist:
-        return JsonResponse({"error": "Turma não encontrada."}, status=404)
+        return JsonResponse({"error": "Classroom not found."}, status=404)
 
     if request.method == "GET":
         return JsonResponse({
@@ -231,46 +231,46 @@ def classroom_actions_api(request, classroom_id):
     try:
         data = json_body(request)
         if not isinstance(data, dict) or not isinstance(data.get("actions"), list):
-            raise ValueError("Envie uma lista de ações para atualizar.")
+            raise ValueError("Send a list of actions to update.")
         items = data["actions"]
         if not items:
-            raise ValueError("Envie ao menos uma ação para atualizar.")
+            raise ValueError("Send at least one action to update.")
 
         prepared = []
         received_ids = set()
         valid_natures = {choice[0] for choice in ClassroomAction.NATURES}
         for item in items:
             if not isinstance(item, dict):
-                raise ValueError("Cada ação enviada deve ser um objeto válido.")
+                raise ValueError("Each submitted action must be a valid object.")
             raw_action_id = item.get("id")
             if isinstance(raw_action_id, bool) or not (
                 isinstance(raw_action_id, int)
                 or (isinstance(raw_action_id, str) and raw_action_id.strip().isdigit())
             ):
-                raise ValueError("Identificador de ação inválido.")
+                raise ValueError("Invalid action identifier.")
             action_id = int(raw_action_id)
             if action_id <= 0:
-                raise ValueError("Identificador de ação inválido.")
+                raise ValueError("Invalid action identifier.")
             if action_id in received_ids:
-                raise ValueError("Uma ação não pode ser enviada mais de uma vez.")
+                raise ValueError("An action cannot be submitted more than once.")
             received_ids.add(action_id)
 
             if "value" not in item:
-                raise ValueError("Informe o valor de todas as ações enviadas.")
+                raise ValueError("Enter a value for every submitted action.")
             value = positive_integer(item["value"])
             active = item.get("active")
             if not isinstance(active, bool):
-                raise ValueError("O status de cada ação deve ser ativo ou inativo.")
+                raise ValueError("Each action status must be active or inactive.")
             nature = item.get("nature")
             if nature is not None and nature not in valid_natures:
-                raise ValueError("Natureza de ação inválida.")
+                raise ValueError("Invalid action type.")
             prepared.append((action_id, value, active, nature))
 
         with transaction.atomic():
             if not Classroom.objects.select_for_update().filter(
                 pk=classroom.id, owner=request.user, active=True
             ).exists():
-                raise ValueError("Esta turma está arquivada e não pode ser configurada.")
+                raise ValueError("This classroom is archived and cannot be configured.")
             actions = {
                 action.id: action
                 for action in ClassroomAction.objects.select_for_update().filter(
@@ -278,13 +278,13 @@ def classroom_actions_api(request, classroom_id):
                 )
             }
             if len(actions) != len(received_ids):
-                raise ValueError("Uma ou mais ações não pertencem a esta turma.")
+                raise ValueError("One or more actions do not belong to this classroom.")
 
             changed = []
             for action_id, value, active, nature in prepared:
                 action = actions[action_id]
                 if nature is not None and nature != action.nature:
-                    raise ValueError("A natureza de uma ação não pode ser alterada.")
+                    raise ValueError("An action's type cannot be changed.")
                 action.value = value
                 action.active = active
                 changed.append(action)
@@ -308,17 +308,17 @@ def rename_classroom_api(request, classroom_id):
         data = json_body(request)
         name = str(data.get("name", "")).strip()
         if not name:
-            raise ValueError("Informe o novo nome da turma.")
+            raise ValueError("Enter the new classroom name.")
         if len(name) > 60:
-            raise ValueError("O nome da turma pode ter no máximo 60 caracteres.")
+            raise ValueError("The classroom name can be at most 60 characters long.")
         classroom = Classroom.objects.get(pk=classroom_id, owner=request.user)
         classroom.name = name
         classroom.save(update_fields=["name"])
         return JsonResponse({"classroom": serialize_classroom(classroom)})
     except Classroom.DoesNotExist:
-        return JsonResponse({"error": "Turma não encontrada."}, status=404)
+        return JsonResponse({"error": "Classroom not found."}, status=404)
     except (ValueError, IntegrityError) as exc:
-        message = "Você já possui uma turma com esse nome." if isinstance(exc, IntegrityError) else str(exc)
+        message = "You already have a classroom with this name." if isinstance(exc, IntegrityError) else str(exc)
         return JsonResponse({"error": message}, status=400)
 
 
@@ -330,12 +330,12 @@ def archive_classroom_api(request, classroom_id):
         classroom = Classroom.objects.get(pk=classroom_id, owner=request.user)
         active = data.get("active")
         if not isinstance(active, bool):
-            raise ValueError("Status de turma inválido.")
+            raise ValueError("Invalid classroom status.")
         classroom.active = active
         classroom.save(update_fields=["active"])
         return JsonResponse({"classroom": serialize_classroom(classroom)})
     except Classroom.DoesNotExist:
-        return JsonResponse({"error": "Turma não encontrada."}, status=404)
+        return JsonResponse({"error": "Classroom not found."}, status=404)
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
 
@@ -347,37 +347,37 @@ def transfer_classroom_api(request, classroom_id):
         data = json_body(request)
         target_id = int(data.get("target_user_id"))
     except (TypeError, ValueError):
-        return JsonResponse({"error": "Selecione um superusuário válido."}, status=400)
+        return JsonResponse({"error": "Select a valid superuser."}, status=400)
 
     try:
         target = User.objects.get(pk=target_id, is_superuser=True, is_active=True)
         if target.pk == request.user.pk:
-            raise ValueError("Escolha outro superusuário.")
+            raise ValueError("Choose a different superuser.")
         with transaction.atomic():
             classroom = Classroom.objects.select_for_update().get(
                 pk=classroom_id, owner=request.user
             )
             if Classroom.objects.filter(owner=target, name=classroom.name).exists():
-                raise ValueError("O destinatário já possui uma turma com esse nome.")
+                raise ValueError("The recipient already has a classroom with this name.")
             classroom.owner = target
             classroom.save(update_fields=["owner"])
         return JsonResponse({"transferred": True, "classroom_id": classroom_id})
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     except User.DoesNotExist:
-        return JsonResponse({"error": "Superusuário de destino não encontrado."}, status=404)
+        return JsonResponse({"error": "Destination superuser not found."}, status=404)
     except Classroom.DoesNotExist:
-        return JsonResponse({"error": "Turma não encontrada."}, status=404)
+        return JsonResponse({"error": "Classroom not found."}, status=404)
     except IntegrityError:
         return JsonResponse(
-            {"error": "O destinatário já possui uma turma com esse nome."}, status=400
+            {"error": "The recipient already has a classroom with this name."}, status=400
         )
 
 
 @require_GET
 @api_login_required
 def students_api(request):
-    reset_performed = ensure_weekly_reset(request.user)
+    weekly_coins_awarded = ensure_weekly_coins(request.user)
     query = request.GET.get("q", "").strip()
     class_filter_enabled = "class_name" in request.GET
     class_name = request.GET.get("class_name", "").strip()
@@ -400,7 +400,7 @@ def students_api(request):
     return JsonResponse({
         "students": [serialize_student(student) for student in students],
         "classes": classes,
-        "reset_performed": reset_performed,
+        "weekly_coins_awarded": weekly_coins_awarded,
     })
 
 
@@ -415,7 +415,7 @@ def student_card_qr_api(request, student_id):
             active=True,
         )
     except Student.DoesNotExist:
-        return JsonResponse({"error": "Aluno não encontrado."}, status=404)
+        return JsonResponse({"error": "Student not found."}, status=404)
 
     query = urlencode({"student": student.id})
     operation_url = request.build_absolute_uri(
@@ -440,7 +440,7 @@ def create_student_api(request):
         data = json_body(request)
         name = str(data.get("name", "")).strip()
         if not name:
-            raise ValueError("Informe o nome do aluno.")
+            raise ValueError("Enter the student's name.")
         code = str(data.get("code", "")).strip() or generate_code()
         student = Student.objects.create(
             name=name,
@@ -473,7 +473,7 @@ def bulk_students_api(request):
             class_name = parts[1] if len(parts) > 1 else default_class_name
             code = parts[2] if len(parts) > 2 and parts[2] else generate_code()
             if not name:
-                errors.append(f"Linha {number}: nome vazio.")
+                errors.append(f"Line {number}: missing name.")
                 continue
             try:
                 student = Student.objects.create(
@@ -483,7 +483,7 @@ def bulk_students_api(request):
                 )
                 created.append(serialize_student(student))
             except IntegrityError:
-                errors.append(f"Linha {number}: código {code} já existe.")
+                errors.append(f"Line {number}: code {code} already exists.")
         return JsonResponse({"created": created, "errors": errors})
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
@@ -495,7 +495,7 @@ def movement_api(request, student_id):
     try:
         data = json_body(request)
         if not isinstance(data, dict):
-            raise ValueError("Envie uma ação válida para a movimentação.")
+            raise ValueError("Submit a valid action for the transaction.")
         student, movement = apply_movement(
             owner=request.user,
             student_id=student_id,
@@ -523,13 +523,13 @@ def delete_student_api(request, student_id):
         student.save(update_fields=["active"])
         return JsonResponse({"deleted": True, "student_id": student.id})
     except Student.DoesNotExist:
-        return JsonResponse({"error": "Aluno não encontrado."}, status=404)
+        return JsonResponse({"error": "Student not found."}, status=404)
 
 
 @require_GET
 @api_login_required
 def movements_api(request):
-    ensure_weekly_reset(request.user)
+    ensure_weekly_coins(request.user)
     limit = min(max(int(request.GET.get("limit", 100)), 1), 500)
     movements = Movement.objects.select_related("student", "student__classroom").filter(
         student__classroom__owner=request.user,
@@ -548,7 +548,7 @@ def movements_api(request):
 @api_login_required
 def analytics_api(request):
     try:
-        ensure_weekly_reset(request.user)
+        ensure_weekly_coins(request.user)
         data = build_analytics(
             owner=request.user,
             period=request.GET.get("period", "week"),
@@ -558,7 +558,7 @@ def analytics_api(request):
         )
         return JsonResponse(data)
     except Classroom.DoesNotExist:
-        return JsonResponse({"error": "Turma não encontrada."}, status=404)
+        return JsonResponse({"error": "Classroom not found."}, status=404)
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
 
@@ -598,17 +598,10 @@ def reset_api(request):
                 movement_type=Movement.RESET,
                 amount=abs(before),
                 signed_amount=-before,
-                reason="Reset manual",
+                reason="Manual reset",
                 balance_before=before,
                 balance_after=0,
             )
-        today = timezone.localdate()
-        iso_year, iso_week, _ = today.isocalendar()
-        AppSetting.objects.update_or_create(
-            owner=request.user,
-            key="last_reset_week",
-            defaults={"value": f"{iso_year}-W{iso_week:02d}"},
-        )
     return JsonResponse({"reset_count": len(students)})
 
 
@@ -617,7 +610,7 @@ def reset_api(request):
 def backup_api(request):
     payload = build_backup(request.user)
     response = JsonResponse(payload, json_dumps_params={"ensure_ascii": False, "indent": 2})
-    filename = f"carteira-backup-{timezone.localtime().strftime('%Y-%m-%d-%H%M')}.json"
+    filename = f"class-wallet-backup-{timezone.localtime().strftime('%Y-%m-%d-%H%M')}.json"
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
@@ -629,7 +622,7 @@ def restore_api(request):
         if request.FILES:
             uploaded = request.FILES.get("file")
             if not uploaded:
-                raise ValueError("Envie um arquivo JSON.")
+                raise ValueError("Upload a JSON file.")
             data = json.loads(uploaded.read().decode("utf-8"))
         else:
             data = json_body(request)
@@ -644,6 +637,6 @@ def restore_api(request):
         return JsonResponse({"error": str(exc)}, status=400)
     except IntegrityError:
         return JsonResponse(
-            {"error": "O backup viola uma restrição do banco e não foi restaurado."},
+            {"error": "The backup violates a database constraint and was not restored."},
             status=400,
         )

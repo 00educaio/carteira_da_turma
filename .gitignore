@@ -5,3 +5,4 @@ venv/
 .env
 staticfiles/
 .DS_Store
+*.zip

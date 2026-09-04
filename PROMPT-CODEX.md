@@ -1,25 +1,27 @@
-# Prompt para o Codex
+# Codex Project Prompt
 
-Analise este projeto Django chamado **Carteira da Turma**.
+Review this Django project named **Class Wallet**.
 
-Objetivo: manter uma aplicação escolar simples, sem login e sem autenticação, hospedada no PythonAnywhere, usando Django, templates, JavaScript puro e SQLite.
+Goal: maintain a simple classroom coin-management application hosted on
+PythonAnywhere, using Django, server-rendered templates, vanilla JavaScript, and
+SQLite.
 
-Regras principais:
+Main rules:
 
-1. Não adicionar React, Vue, Next.js, banco externo, Redis, Celery ou Docker sem necessidade explícita.
-2. Manter um único app Django chamado `wallet`.
-3. Preservar a configuração de deploy descrita no README e em `pythonanywhere_wsgi.py.example`.
-4. Usar SQLite com armazenamento persistente no PythonAnywhere.
-5. Preservar backup manual em JSON, cópia automática no `localStorage` e restauração quando o servidor estiver vazio.
-6. O reset semanal deve ocorrer na primeira abertura de cada nova semana, usando o fuso `America/Maceio`.
-7. Toda alteração de saldo deve ser atômica e não pode deixar saldo negativo.
-8. Não criar login para professor ou alunos.
-9. Interface em português, responsiva para celular e computador.
-10. Antes de concluir mudanças, execute:
+1. Do not add React, Vue, Next.js, an external database, Redis, Celery, or Docker unless explicitly required.
+2. Keep a single Django app named `wallet`.
+3. Preserve the deployment setup described in `README.md` and `pythonanywhere_wsgi.py.example`.
+4. Use SQLite with persistent storage on PythonAnywhere.
+5. Preserve manual JSON backups, the automatic `localStorage` copy, and restoration when the server is empty.
+6. Award every active student 15 coins each Monday at 7:00 a.m. in `America/Maceio`; never award the same weekly allowance twice.
+7. Every balance change must be atomic. Expenses are allowed to make balances negative.
+8. Keep superuser authentication and data isolation between classroom owners.
+9. Keep the interface in English and responsive on mobile and desktop.
+10. Before completing changes, run:
 
 ```bash
 python manage.py check
 python manage.py test
 ```
 
-Agora revise o projeto, corrija erros encontrados e preserve a simplicidade da arquitetura.
+Review the project, fix any issues found, and preserve its simple architecture.

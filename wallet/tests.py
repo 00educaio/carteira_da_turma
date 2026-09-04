@@ -1,15 +1,75 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
+from io import StringIO
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
 from .models import AppSetting, Classroom, ClassroomAction, Movement, Student
-from .services import DEFAULT_CLASSROOM_ACTIONS, ensure_classroom_actions
+from .services import (
+    DEFAULT_CLASSROOM_ACTIONS,
+    WEEKLY_COINS_SETTING,
+    ensure_classroom_actions,
+    weekly_coins_week_key,
+)
+
+
+class WeeklyCoinsTests(TestCase):
+    def test_weekly_window_changes_at_seven_on_monday(self):
+        timezone_name = ZoneInfo("America/Maceio")
+        before = datetime(2026, 9, 7, 6, 59, tzinfo=timezone_name)
+        at_cutoff = datetime(2026, 9, 7, 7, 0, tzinfo=timezone_name)
+
+        self.assertEqual(weekly_coins_week_key(before), "2026-W36")
+        self.assertEqual(weekly_coins_week_key(at_cutoff), "2026-W37")
+
+    def test_command_awards_once_and_only_to_active_students(self):
+        user = get_user_model().objects.create_superuser(
+            username="weekly-coins", password="test-password"
+        )
+        classroom = Classroom.objects.create(owner=user, name="Grade 6A")
+        archived = Classroom.objects.create(owner=user, name="Archived", active=False)
+        active_student = Student.objects.create(
+            name="Ana", classroom=classroom, code="weekly-1", balance=4
+        )
+        inactive_student = Student.objects.create(
+            name="Ben", classroom=classroom, code="weekly-2", balance=4, active=False
+        )
+        archived_student = Student.objects.create(
+            name="Cara", classroom=archived, code="weekly-3", balance=4
+        )
+
+        call_command("award_weekly_coins", stdout=StringIO())
+        call_command("award_weekly_coins", stdout=StringIO())
+
+        active_student.refresh_from_db()
+        inactive_student.refresh_from_db()
+        archived_student.refresh_from_db()
+        self.assertEqual(active_student.balance, 19)
+        self.assertEqual(inactive_student.balance, 4)
+        self.assertEqual(archived_student.balance, 4)
+        allowance = Movement.objects.get(reason="Weekly allowance")
+        self.assertEqual(allowance.amount, 15)
+        self.assertEqual(allowance.balance_before, 4)
+        self.assertEqual(allowance.balance_after, 19)
+
+    def test_default_expenses_include_play_video_game(self):
+        user = get_user_model().objects.create_superuser(
+            username="video-game", password="test-password"
+        )
+        classroom = Classroom.objects.create(owner=user, name="Grade 7A")
+
+        ensure_classroom_actions(classroom)
+
+        action = classroom.actions.get(default_key="play-video-game")
+        self.assertEqual(action.name, "Play Video Game")
+        self.assertEqual(action.nature, ClassroomAction.DEBIT)
 
 
 class ClassAdministrationTests(TestCase):
@@ -65,22 +125,26 @@ class ClassAdministrationTests(TestCase):
         self.assertEqual(self.student_a.balance, 0)
         self.assertEqual(self.student_b.balance, 20)
 
-    def test_first_opening_in_a_new_week_resets_active_students(self):
+    def test_first_opening_in_a_new_week_awards_fifteen_coins(self):
         AppSetting.objects.create(
-            owner=self.user, key="last_reset_week", value="2000-W01"
+            owner=self.user, key=WEEKLY_COINS_SETTING, value="2000-W01"
         )
 
         response = self.client.get("/api/students/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["reset_performed"])
+        self.assertEqual(response.json()["weekly_coins_awarded"], 2)
         self.student_a.refresh_from_db()
         self.student_b.refresh_from_db()
-        self.assertEqual(self.student_a.balance, 0)
-        self.assertEqual(self.student_b.balance, 0)
+        self.assertEqual(self.student_a.balance, 25)
+        self.assertEqual(self.student_b.balance, 35)
         self.assertEqual(
-            Movement.objects.filter(movement_type=Movement.RESET).count(), 2
+            Movement.objects.filter(reason="Weekly allowance", amount=15).count(), 2
         )
+
+        repeated = self.client.get("/api/students/")
+        self.assertEqual(repeated.json()["weekly_coins_awarded"], 0)
+        self.assertEqual(Movement.objects.filter(reason="Weekly allowance").count(), 2)
 
     def test_bulk_creation_uses_selected_class_as_default(self):
         response = self.client.post(
@@ -415,7 +479,7 @@ class ClassroomActionTests(TestCase):
         movement.refresh_from_db()
 
         self.assertIsNone(movement.action)
-        self.assertEqual(movement.reason, "Bom comportamento")
+        self.assertEqual(movement.reason, "Good Behavior")
         self.assertEqual(movement.amount, 1)
 
     def test_values_are_independent_between_classrooms(self):
@@ -555,7 +619,7 @@ class ActionMovementTests(TestCase):
         self.assertEqual(movement.movement_type, Movement.DEBIT)
         self.assertEqual(movement.amount, 4)
         self.assertEqual(movement.signed_amount, -4)
-        self.assertEqual(movement.reason, "Ir ao banheiro")
+        self.assertEqual(movement.reason, "Use the Bathroom")
         self.assertEqual(response.json()["movement"]["action_id"], action.id)
 
     def test_lost_card_replacement_is_one_debit_and_can_make_balance_negative(self):
@@ -570,7 +634,7 @@ class ActionMovementTests(TestCase):
         self.assertEqual(self.student.balance, -6)
         movements = Movement.objects.filter(student=self.student)
         self.assertEqual(movements.count(), 1)
-        self.assertEqual(movements.get().reason, "Reposição de cartão perdido")
+        self.assertEqual(movements.get().reason, "Lost Card Replacement")
 
     def test_inactive_or_other_classroom_action_is_rejected(self):
         inactive = self.classroom.actions.get(default_key="good-behavior")
@@ -774,9 +838,9 @@ class AnalyticsTests(TestCase):
         )
 
         self.assertEqual(invalid.status_code, 400)
-        self.assertIn("data inicial", invalid.json()["error"])
+        self.assertIn("start date", invalid.json()["error"])
         self.assertEqual(malformed.status_code, 400)
-        self.assertIn("datas válidas", malformed.json()["error"])
+        self.assertIn("valid dates", malformed.json()["error"])
 
     def test_default_period_is_the_current_week(self):
         data = self.client.get("/api/analytics/").json()
@@ -791,7 +855,7 @@ class AnalyticsTests(TestCase):
 
         invalid = self.client.get("/api/analytics/", {"period": "trimestre"})
         self.assertEqual(invalid.status_code, 400)
-        self.assertIn("Período", invalid.json()["error"])
+        self.assertIn("period", invalid.json()["error"])
 
     def test_cross_owner_or_archived_classroom_filter_is_hidden(self):
         external_class = Classroom.objects.get(owner=self.other_user)
@@ -807,7 +871,7 @@ class AnalyticsTests(TestCase):
     def test_page_exposes_financial_dashboard_and_filters(self):
         response = self.client.get("/")
 
-        self.assertContains(response, "Análise financeira")
+        self.assertContains(response, "Coin analytics")
         self.assertContains(response, 'id="analyticsPeriod"')
         self.assertContains(response, 'id="analyticsClassroom"')
         self.assertContains(response, 'id="analyticsNegativeTable"')
@@ -865,7 +929,7 @@ class BackupRestoreTests(TestCase):
             item for item in backup["movements"] if item["id"] == movement.id
         )
         self.assertEqual(exported_movement["action_id"], action.id)
-        self.assertEqual(len(backup["actions"]), 20)
+        self.assertEqual(len(backup["actions"]), 2 * len(DEFAULT_CLASSROOM_ACTIONS))
 
         response = self.client.post(
             "/api/restore/", data=json.dumps(backup), content_type="application/json"
@@ -932,7 +996,9 @@ class BackupRestoreTests(TestCase):
         self.assertEqual(response.json()["version"], 2)
         classroom = Classroom.objects.get(owner=self.user, name="Legada")
         self.assertEqual(classroom.actions.count(), len(DEFAULT_CLASSROOM_ACTIONS))
-        self.assertEqual(classroom.actions.filter(value=1).count(), 10)
+        self.assertEqual(
+            classroom.actions.filter(value=1).count(), len(DEFAULT_CLASSROOM_ACTIONS)
+        )
         student = Student.objects.get(code="9301")
         self.assertEqual(student.balance, -5)
         movement = Movement.objects.get(student=student)
@@ -964,7 +1030,7 @@ class BackupRestoreTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Valor da ação", response.json()["error"])
+        self.assertIn("Value for action", response.json()["error"])
         self.assertTrue(Classroom.objects.filter(pk=classroom.pk).exists())
         self.assertTrue(Student.objects.filter(pk=student.pk, balance=12).exists())
         self.assertTrue(Movement.objects.filter(pk=movement.pk).exists())
@@ -993,7 +1059,7 @@ class BackupRestoreTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("outra turma", response.json()["error"])
+        self.assertIn("another classroom", response.json()["error"])
         self.assertTrue(Student.objects.filter(pk=student.pk).exists())
         self.assertEqual(Classroom.objects.filter(owner=self.user).count(), 2)
 
